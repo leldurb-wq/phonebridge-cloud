@@ -151,4 +151,5 @@ async function init() {
     else if (session) await activateSession(session);
   } catch (e) { status(e.message || 'Could not load your workspace.', true); }
 }
-init();
+// The login page owns the recovery callback and token exchange. Do not create a second Supabase client on recovery URLs.
+if (!recoveryLink) init();
