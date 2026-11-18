@@ -90,7 +90,7 @@ app.post('/api/commands', async (req,res)=>{
   const { deviceId, action } = req.body || {};
   const payload = req.body?.payload === undefined ? {} : req.body.payload;
   const approved = req.body?.approved === true;
-  const allowed = ['system_info','list_files','read_file','write_file','create_folder','launch_app'];
+  const allowed = ['system_info','screen_capture','list_files','read_file','write_file','create_folder','launch_app'];
   if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
   if (!allowed.includes(action)) return res.status(400).json({ ok:false, error:'Action is not allowed.' });
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.status(400).json({ ok:false, error:'Task payload must be an object.' });

@@ -7,6 +7,8 @@ const recoveryLink = new URLSearchParams(location.search).get('password_recovery
 let supabase = null;
 let currentUser = null;
 let refreshTimer = null;
+let screenTimer = null;
+let screenBusy = false;
 let uiBound = false;
 
 function status(message, error = false) {
@@ -69,6 +71,27 @@ async function loadCommands() {
     const detail = c.error_message || (c.result ? JSON.stringify(c.result) : '');
     return `<div class="command-row"><b>${escapeHtml(c.action)}</b><span>${escapeHtml(c.status)}</span><small>${escapeHtml(new Date(c.created_at).toLocaleTimeString())}${detail ? ' · ' + escapeHtml(detail.slice(0, 1200)) : ''}</small></div>`;
   }).join('') || '<p class="sub">No tasks yet.</p>';
+  const latestScreen = (data || []).find(c => c.action === 'screen_capture' && c.status === 'completed' && c.result?.imageBase64);
+  if (latestScreen) {
+    $('screenImage').src = 'data:' + (latestScreen.result.mimeType || 'image/jpeg') + ';base64,' + latestScreen.result.imageBase64;
+    $('screenImage').classList.remove('hidden');
+    $('screenPlaceholder').classList.add('hidden');
+    $('screenStatus').textContent = 'Last captured: ' + new Date(latestScreen.result.capturedAt || latestScreen.completed_at || latestScreen.created_at).toLocaleTimeString();
+  }
+}
+async function requestScreenFrame() {
+  if (screenBusy) return;
+  screenBusy = true;
+  try { await queueCommand('screen_capture'); }
+  catch (e) { $('screenStatus').textContent = 'Screen capture failed: ' + e.message; }
+  finally { screenBusy = false; }
+}
+function stopScreenView() {
+  if (screenTimer) clearInterval(screenTimer);
+  screenTimer = null;
+  $('screenStart').disabled = false;
+  $('screenStop').disabled = true;
+  $('screenStatus').textContent = 'Screen view stopped. The last image remains visible.';
 }
 async function runUi(action, payload) {
   try {
@@ -102,6 +125,15 @@ function bindUi() {
     if (!window.confirm('Approve writing or replacing this file on your ThinkPad?\n\n' + path)) return;
     runUi('write_file', { path, content });
   });
+  $('screenStart').addEventListener('click', () => {
+    if (screenTimer) return;
+    $('screenStart').disabled = true;
+    $('screenStop').disabled = false;
+    $('screenStatus').textContent = 'Starting screen view…';
+    requestScreenFrame();
+    screenTimer = setInterval(requestScreenFrame, 7000);
+  });
+  $('screenStop').addEventListener('click', stopScreenView);
   $('refreshDevices').addEventListener('click', async () => { try { await loadDevices(); await loadCommands(); status('Device list refreshed.'); } catch (e) { status(e.message, true); } });
   $('deviceList').addEventListener('change', () => loadCommands().catch(e => status(e.message, true)));
 }
@@ -124,6 +156,7 @@ async function activateSession(session) {
   } catch (e) { status(e.message || 'Could not load your devices.', true); }
 }
 function deactivateSession() {
+  stopScreenView();
   clearInterval(refreshTimer);
   refreshTimer = null;
   currentUser = null;
