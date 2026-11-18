@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const $ = id => document.getElementById(id);
 const workspace = $('workspace');
 const statusBox = $('workspaceStatus');
-const recoveryLink = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
+const recoveryLink = new URLSearchParams(location.search).get('password_recovery') === '1' || new URLSearchParams(location.search).get('type') === 'recovery' || new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
 let supabase = null;
 let currentUser = null;
 let refreshTimer = null;
