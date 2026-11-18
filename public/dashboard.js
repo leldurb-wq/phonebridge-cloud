@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const $ = id => document.getElementById(id);
 const workspace = $('workspace');
 const statusBox = $('workspaceStatus');
+const recoveryLink = new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
 let supabase = null;
 let currentUser = null;
 let refreshTimer = null;
@@ -136,14 +137,18 @@ async function init() {
     if (!configResponse.ok || !config.ready) return;
     supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
     supabase.auth.onAuthStateChange((event, nextSession) => {
+      // A recovery link must show the password form, not the workspace.
+      if (event === 'PASSWORD_RECOVERY') { deactivateSession(); return; }
       // Defer Supabase calls until after its auth callback completes.
       setTimeout(() => {
-        if (nextSession) activateSession(nextSession);
+        if (recoveryLink) deactivateSession();
+        else if (nextSession) activateSession(nextSession);
         else deactivateSession();
       }, 0);
     });
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) await activateSession(session);
+    if (recoveryLink) deactivateSession();
+    else if (session) await activateSession(session);
   } catch (e) { status(e.message || 'Could not load your workspace.', true); }
 }
 init();
