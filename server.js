@@ -16,6 +16,8 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseAdmin = supabaseUrl && serviceKey
   ? createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
   : null;
+const screenFrames = new Map();
+const MAX_SCREEN_FRAME_BYTES = 16000;
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1100kb', strict: true }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
@@ -81,6 +83,42 @@ app.post('/api/enrollments', async (req,res)=>{
   }
 });
 
+// Agent pushes small JPEG frames over authenticated HTTPS; only the owning account can read them.
+app.post('/api/agent/screen-frame', async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Screen relay is not configured.' });
+  const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
+  const token = /^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization') || '')?.[1] || '';
+  const imageBase64 = typeof req.body?.imageBase64 === 'string' ? req.body.imageBase64 : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId) || !token) return res.status(401).json({ ok:false, error:'Device authentication required.' });
+  if (req.body?.mimeType !== 'image/jpeg' || !/^[A-Za-z0-9+/]+=*$/.test(imageBase64)) return res.status(400).json({ ok:false, error:'A valid JPEG frame is required.' });
+  const bytes = Buffer.from(imageBase64, 'base64');
+  if (bytes.length < 4 || bytes.length > MAX_SCREEN_FRAME_BYTES) return res.status(413).json({ ok:false, error:'Screen frame exceeds the relay limit.' });
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) return res.status(400).json({ ok:false, error:'Frame data is not a complete JPEG.' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  try {
+    const { data:agent, error } = await supabaseAdmin.from('device_agents').select('device_id').eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).maybeSingle();
+    if (error || !agent) return res.status(401).json({ ok:false, error:'Device authentication failed.' });
+    screenFrames.set(deviceId, { mimeType:'image/jpeg', imageBase64, capturedAt:new Date().toISOString() });
+    return res.status(204).end();
+  } catch (_) { return res.status(503).json({ ok:false, error:'Could not relay the screen frame.' }); }
+});
+
+app.get('/api/screen-frame', async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user = await requireOwner(req,res);
+  if (!user) return;
+  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Screen relay is not configured.' });
+  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
+  try {
+    const { data:device, error } = await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
+    if (error || !device) return res.status(404).json({ ok:false, error:'That device was not found in your account.' });
+    const frame = screenFrames.get(deviceId) || null;
+    return res.json({ ok:true, frame });
+  } catch (_) { return res.status(503).json({ ok:false, error:'Could not read the live screen frame.' }); }
+});
+
 // Owner-authenticated command queue. Mutating actions require an explicit UI approval flag.
 app.post('/api/commands', async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -90,7 +128,7 @@ app.post('/api/commands', async (req,res)=>{
   const { deviceId, action } = req.body || {};
   const payload = req.body?.payload === undefined ? {} : req.body.payload;
   const approved = req.body?.approved === true;
-  const allowed = ['system_info','screen_capture','list_files','read_file','write_file','create_folder','launch_app'];
+  const allowed = ['system_info','screen_capture','screen_stream_start','screen_stream_keepalive','screen_stream_stop','list_files','read_file','write_file','create_folder','launch_app'];
   if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
   if (!allowed.includes(action)) return res.status(400).json({ ok:false, error:'Action is not allowed.' });
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.status(400).json({ ok:false, error:'Task payload must be an object.' });

@@ -8,7 +8,9 @@ let supabase = null;
 let currentUser = null;
 let refreshTimer = null;
 let screenTimer = null;
+let screenKeepaliveTimer = null;
 let screenBusy = false;
+let lastLiveFrameAt = '';
 let uiBound = false;
 
 function status(message, error = false) {
@@ -86,9 +88,29 @@ async function requestScreenFrame() {
   catch (e) { $('screenStatus').textContent = 'Screen capture failed: ' + e.message; }
   finally { screenBusy = false; }
 }
+async function pollLiveScreenFrame() {
+  const deviceId = document.querySelector('input[name="device"]:checked')?.value;
+  if (!deviceId) return;
+  try {
+    const headers = await authHeaders();
+    const response = await fetch('/api/screen-frame?deviceId=' + encodeURIComponent(deviceId), { headers, cache:'no-store' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load live frame.');
+    const frame = data.frame;
+    if (frame?.imageBase64 && frame.capturedAt !== lastLiveFrameAt) {
+      lastLiveFrameAt = frame.capturedAt;
+      $('screenImage').src = 'data:' + frame.mimeType + ';base64,' + frame.imageBase64;
+      $('screenImage').classList.remove('hidden');
+      $('screenPlaceholder').classList.add('hidden');
+      $('screenStatus').textContent = 'Live · ' + new Date(frame.capturedAt).toLocaleTimeString();
+    }
+  } catch (e) { $('screenStatus').textContent = 'Live screen error: ' + e.message; }
+}
 function stopScreenView() {
   if (screenTimer) clearInterval(screenTimer);
+  if (screenKeepaliveTimer) clearInterval(screenKeepaliveTimer);
   screenTimer = null;
+  screenKeepaliveTimer = null;
   $('screenStart').disabled = false;
   $('screenStop').disabled = true;
   $('screenStatus').textContent = 'Screen view stopped. The last image remains visible.';
@@ -125,15 +147,27 @@ function bindUi() {
     if (!window.confirm('Approve writing or replacing this file on your ThinkPad?\n\n' + path)) return;
     runUi('write_file', { path, content });
   });
-  $('screenStart').addEventListener('click', () => {
+  $('screenStart').addEventListener('click', async () => {
     if (screenTimer) return;
     $('screenStart').disabled = true;
     $('screenStop').disabled = false;
-    $('screenStatus').textContent = 'Starting screen view…';
-    requestScreenFrame();
-    screenTimer = setInterval(requestScreenFrame, 7000);
+    $('screenStatus').textContent = 'Starting secure live stream…';
+    try {
+      await queueCommand('screen_stream_start');
+      lastLiveFrameAt = '';
+      await pollLiveScreenFrame();
+      screenTimer = setInterval(pollLiveScreenFrame, 800);
+      screenKeepaliveTimer = setInterval(() => queueCommand('screen_stream_keepalive').catch(() => {}), 20000);
+    } catch (e) {
+      stopScreenView();
+      $('screenStatus').textContent = 'Could not start live screen: ' + e.message;
+    }
   });
-  $('screenStop').addEventListener('click', stopScreenView);
+  $('screenStop').addEventListener('click', async () => {
+    stopScreenView();
+    try { await queueCommand('screen_stream_stop'); }
+    catch (e) { $('screenStatus').textContent = 'Stop request failed: ' + e.message; }
+  });
   $('refreshDevices').addEventListener('click', async () => { try { await loadDevices(); await loadCommands(); status('Device list refreshed.'); } catch (e) { status(e.message, true); } });
   $('deviceList').addEventListener('change', () => loadCommands().catch(e => status(e.message, true)));
 }
