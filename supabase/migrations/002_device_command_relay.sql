@@ -83,4 +83,4 @@ comment on table public.device_commands is
 -- New commands are inserted by the authenticated server after validating the action.
 revoke all on public.device_commands from anon, authenticated;
 grant select on public.device_commands to authenticated;
-grant update (status) on public.device_commands to authenticated;\n
+grant update (status) on public.device_commands to authenticated;

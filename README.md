@@ -7,7 +7,7 @@ This is a separate cloud-ready application workspace. It does not replace or mod
 - Supabase Auth manages email/password, Google OAuth and SMS OTP.
 - Supabase Postgres stores per-user metadata with Row Level Security (RLS).
 - Supabase private Storage stores each user's files under `<auth.uid()>/<object>`.
-- The Supabase service-role key is deliberately not used by the browser or this app.
+- The Supabase service-role key is used only by the trusted cloud server for device enrollment and command brokering. It is never sent to the browser.
 
 ## Local validation
 ```powershell
@@ -30,7 +30,8 @@ Open http://localhost:3000. Without Supabase credentials, the page intentionally
 ## Render setup
 1. Push this `cloud-app` directory to a private Git repository.
 2. Create a Render Web Service with root directory `cloud-app` (or use the included Blueprint).
-3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_ORIGIN` as environment variables.
+3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `APP_ORIGIN` as environment variables. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only; never put it in browser code or commit it to Git.
+4. Apply reviewed migrations `002_device_command_relay.sql` and `003_device_relay_functions.sql` in the Supabase SQL Editor after migration `001` is already applied. Back up the project first.
 4. Deploy and verify `/health` and `/config`.
 5. Add the Render URL to Supabase Auth redirect allow-list.
 
