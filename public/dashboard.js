@@ -10,6 +10,7 @@ let refreshTimer = null;
 let screenTimer = null;
 let screenKeepaliveTimer = null;
 let screenBusy = false;
+let controlBusy = false;
 let lastLiveFrameAt = '';
 let uiBound = false;
 
@@ -57,7 +58,7 @@ async function queueCommand(action, payload = {}) {
   const deviceId = document.querySelector('input[name="device"]:checked')?.value;
   if (!deviceId) throw new Error('Select a device first.');
   const headers = await authHeaders();
-  const approved = ['write_file','create_folder'].includes(action);
+  const approved = ['write_file','create_folder','desktop_control'].includes(action);
   const response = await fetch('/api/commands', { method: 'POST', headers, body: JSON.stringify({ deviceId, action, payload, approved }) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Could not queue this task.');
@@ -106,6 +107,38 @@ async function pollLiveScreenFrame() {
     }
   } catch (e) { $('screenStatus').textContent = 'Live screen error: ' + e.message; }
 }
+function updateControlAvailability() {
+  const enabled = $('controlEnabled').checked && !!screenTimer;
+  $('pointerMode').disabled = !enabled;
+  $('scrollUp').disabled = !enabled;
+  $('scrollDown').disabled = !enabled;
+  $('keyChoice').disabled = !enabled;
+  $('sendKey').disabled = !enabled;
+  $('typeText').disabled = !enabled;
+  $('sendText').disabled = !enabled;
+  $('screenImage').classList.toggle('control-ready', enabled);
+  $('controlStatus').textContent = enabled ? 'Controls enabled. Click the screen image to move or click.' : 'Remote controls are disabled.';
+}
+async function sendDesktopControl(payload) {
+  if (!$('controlEnabled').checked || !screenTimer) throw new Error('Start live screen view and enable remote controls first.');
+  if (controlBusy) return;
+  controlBusy = true;
+  $('controlStatus').textContent = 'Sending control…';
+  try {
+    await queueCommand('desktop_control', payload);
+    $('controlStatus').textContent = 'Control sent to your ThinkPad.';
+  } catch (e) {
+    $('controlStatus').textContent = 'Control failed: ' + e.message;
+  } finally { controlBusy = false; }
+}
+function screenPoint(event) {
+  const image = $('screenImage');
+  const rect = image.getBoundingClientRect();
+  const scale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+  const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+  const left = rect.left + (rect.width - width) / 2, top = rect.top + (rect.height - height) / 2;
+  return { x:Math.max(0,Math.min(1,(event.clientX-left)/width)), y:Math.max(0,Math.min(1,(event.clientY-top)/height)) };
+}
 function stopScreenView() {
   if (screenTimer) clearInterval(screenTimer);
   if (screenKeepaliveTimer) clearInterval(screenKeepaliveTimer);
@@ -114,6 +147,7 @@ function stopScreenView() {
   $('screenStart').disabled = false;
   $('screenStop').disabled = true;
   $('screenStatus').textContent = 'Screen view stopped. The last image remains visible.';
+  if ($('controlEnabled')) { $('controlEnabled').checked = false; updateControlAvailability(); }
 }
 async function runUi(action, payload) {
   try {
@@ -158,6 +192,7 @@ function bindUi() {
       await pollLiveScreenFrame();
       screenTimer = setInterval(pollLiveScreenFrame, 800);
       screenKeepaliveTimer = setInterval(() => queueCommand('screen_stream_keepalive').catch(() => {}), 20000);
+      updateControlAvailability();
     } catch (e) {
       stopScreenView();
       $('screenStatus').textContent = 'Could not start live screen: ' + e.message;
@@ -167,6 +202,25 @@ function bindUi() {
     stopScreenView();
     try { await queueCommand('screen_stream_stop'); }
     catch (e) { $('screenStatus').textContent = 'Stop request failed: ' + e.message; }
+  });
+  $('controlEnabled').addEventListener('change', () => {
+    if ($('controlEnabled').checked && !window.confirm('Enable remote mouse and keyboard control of your ThinkPad? Only enable this while you are watching the screen.')) $('controlEnabled').checked = false;
+    updateControlAvailability();
+  });
+  $('screenImage').addEventListener('click', event => {
+    if (!$('controlEnabled').checked || !screenTimer) return;
+    const point = screenPoint(event), mode = $('pointerMode').value;
+    sendDesktopControl(mode === 'move' ? { type:'move', ...point } : { type:'click', ...point, button:mode });
+  });
+  $('screenImage').addEventListener('contextmenu', event => event.preventDefault());
+  $('scrollUp').addEventListener('click', () => sendDesktopControl({ type:'scroll', delta:360 }));
+  $('scrollDown').addEventListener('click', () => sendDesktopControl({ type:'scroll', delta:-360 }));
+  $('sendKey').addEventListener('click', () => sendDesktopControl({ type:'key', key:$('keyChoice').value }));
+  $('sendText').addEventListener('click', () => {
+    const text = $('typeText').value;
+    if (!text) return;
+    if (!window.confirm('Type this text into the active ThinkPad window?')) return;
+    sendDesktopControl({ type:'type', text });
   });
   $('refreshDevices').addEventListener('click', async () => { try { await loadDevices(); await loadCommands(); status('Device list refreshed.'); } catch (e) { status(e.message, true); } });
   $('deviceList').addEventListener('change', () => loadCommands().catch(e => status(e.message, true)));

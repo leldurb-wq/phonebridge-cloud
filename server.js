@@ -128,11 +128,21 @@ app.post('/api/commands', async (req,res)=>{
   const { deviceId, action } = req.body || {};
   const payload = req.body?.payload === undefined ? {} : req.body.payload;
   const approved = req.body?.approved === true;
-  const allowed = ['system_info','screen_capture','screen_stream_start','screen_stream_keepalive','screen_stream_stop','list_files','read_file','write_file','create_folder','launch_app'];
+  const allowed = ['system_info','screen_capture','screen_stream_start','screen_stream_keepalive','screen_stream_stop','desktop_control','list_files','read_file','write_file','create_folder','launch_app'];
   if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
   if (!allowed.includes(action)) return res.status(400).json({ ok:false, error:'Action is not allowed.' });
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.status(400).json({ ok:false, error:'Task payload must be an object.' });
-  if (['write_file','create_folder'].includes(action) && !approved) return res.status(403).json({ ok:false, error:'This action requires explicit owner approval.' });
+  if (['write_file','create_folder','desktop_control'].includes(action) && !approved) return res.status(403).json({ ok:false, error:'This action requires explicit owner approval.' });
+  if (action === 'desktop_control') {
+    const p = payload;
+    const type = p.type;
+    if (!['move','click','scroll','key','type'].includes(type)) return res.status(400).json({ ok:false, error:'Unsupported desktop control.' });
+    if (['move','click'].includes(type) && (!Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)) return res.status(400).json({ ok:false, error:'Pointer coordinates must be between 0 and 1.' });
+    if (type === 'click' && !['left','right','middle'].includes(p.button || 'left')) return res.status(400).json({ ok:false, error:'Unsupported mouse button.' });
+    if (type === 'scroll' && (!Number.isInteger(p.delta) || p.delta === 0 || Math.abs(p.delta) > 1200)) return res.status(400).json({ ok:false, error:'Scroll amount is out of range.' });
+    if (type === 'type' && (typeof p.text !== 'string' || p.text.length > 300 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(p.text))) return res.status(400).json({ ok:false, error:'Text is too long or contains unsupported control characters.' });
+    if (type === 'key' && (typeof p.key !== 'string' || p.key.length > 20 || !/^(?:(?:CTRL|ALT|SHIFT|WIN)\+)*(?:ENTER|ESC|TAB|BACKSPACE|DELETE|UP|DOWN|LEFT|RIGHT|HOME|END|PAGEUP|PAGEDOWN|SPACE|F5|F11|[A-Z0-9])$/i.test(p.key))) return res.status(400).json({ ok:false, error:'That key or shortcut is not allowed.' });
+  }
   const relativePath = payload.path;
   if (['list_files','read_file','write_file','create_folder'].includes(action)) {
     if (typeof relativePath !== 'string' || !relativePath.trim() || relativePath.length > 240 || path.isAbsolute(relativePath) || relativePath.split(/[\\\\/]+/).some(part => part === '..')) return res.status(400).json({ ok:false, error:'Use a safe relative path inside the PhoneBridge workspace.' });
