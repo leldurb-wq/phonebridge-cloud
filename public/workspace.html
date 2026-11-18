@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Private Workspace</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
+        .container { text-align: center; }
+        .loading { display: none; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" class="loading">Loading...</div>
+        <div id="error" class="error"></div>
+        <div id="userInfo"></div>
+        <button id="signOut">Sign Out</button>
+    </div>
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const userInfo = document.getElementById('userInfo');
+        const signOutButton = document.getElementById('signOut');
+
+        async function init() {
+            loading.style.display = 'block';
+            try {
+                const response = await fetch('/config', { cache: 'no-store' });
+                if (!response.ok) throw new Error('Failed to load config.');
+                const config = await response.json();
+                if (!config.ready || !config.supabaseUrl || !config.supabaseAnonKey) {
+                    throw new Error('Invalid configuration.');
+                }
+
+                const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                if (sessionError || !session) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
+                if (userError || !user || user.id !== session.user.id) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/';
+                    return;
+                }
+
+                userInfo.textContent = `Logged in as: ${user.email}`;
+            } catch (error) {
+                errorDiv.textContent = error.message;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        signOutButton.onclick = async () => {
+            try {
+                const { error } = await supabase.auth.signOut();
+                if (error) throw error;
+                window.location.href = '/';
+            } catch (error) {
+                errorDiv.textContent = error.message;
+            }
+        };
+
+        init();
+    </script>
+</body>
+</html>
