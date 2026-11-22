@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const $ = id => document.getElementById(id);
 const workspace = $('workspace');
+const appHome = $('appHome');
 const statusBox = $('workspaceStatus');
 const recoveryLink = new URLSearchParams(location.search).get('password_recovery') === '1' || new URLSearchParams(location.search).get('type') === 'recovery' || new URLSearchParams(location.hash.slice(1)).get('type') === 'recovery';
 let supabase = null;
@@ -228,12 +229,15 @@ function bindUi() {
 async function activateSession(session) {
   if (!session?.user) return;
   currentUser = session.user;
-  workspace.classList.remove('hidden');
+  appHome.classList.remove('hidden');
+  workspace.classList.add('hidden');
   $('authCard').classList.add('hidden');
   $('accountLabel').textContent = session.user.email || 'Signed in';
   if (!uiBound) {
     bindUi();
     $('signOut').addEventListener('click', async () => { await supabase.auth.signOut(); });
+    $('openAgentConsole').addEventListener('click', () => { appHome.classList.add('hidden'); workspace.classList.remove('hidden'); });
+    $('backToHome').addEventListener('click', () => { workspace.classList.add('hidden'); appHome.classList.remove('hidden'); });
     uiBound = true;
   }
   clearInterval(refreshTimer);
@@ -249,6 +253,7 @@ function deactivateSession() {
   refreshTimer = null;
   currentUser = null;
   workspace.classList.add('hidden');
+  appHome.classList.add('hidden');
   $('authCard').classList.remove('hidden');
 }
 async function init() {
