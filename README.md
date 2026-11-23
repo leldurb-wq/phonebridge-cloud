@@ -40,27 +40,29 @@ Keep `SUPABASE_SERVICE_ROLE_KEY` only in Render's environment settings.
 1. Push this `cloud-app` directory to a private Git repository.
 2. Create a Render Web Service with root directory `cloud-app` (or use the included Blueprint).
 3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `APP_ORIGIN` as environment variables. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only; never put it in browser code or commit it to Git.
-4. Do not apply migration 004. It is intentionally a no-op; the server and worker now allow only actions implemented by the cloud worker. Do not apply or rerun any migrations without first confirming live migration state and approval.
-4. Deploy and verify `/health` and `/config`.
-5. Add the Render URL to Supabase Auth redirect allow-list.
+4. Do not apply migration 004. It enables unsupported screen/desktop-control actions and is intentionally excluded from this release. Do not apply or rerun migrations without first confirming live migration state and approval.
+5. Deploy and verify `/health` and `/config`.
+6. Add the Render URL to Supabase Auth redirect allow-list.
 
 ## ThinkPad outbound worker
 
 The worker makes outbound HTTPS requests only; it opens no inbound listening port and requires no Tailscale, public IP, or router forwarding.
 
-On the ThinkPad, from a trusted Node.js 20+ environment:
+For normal users, download `https://phonebridge-cloud.onrender.com/downloads/PhoneBridge-Agent-Windows.zip`, extract it, install Node.js 20+, and double-click `Start-PhoneBridge-Agent.cmd`. It configures the cloud URL automatically and prompts for the six-digit code. Keep its terminal window open while the computer should stay connected.
+
+For developers running from this repository, use a trusted Node.js 20+ environment:
 ```powershell
 $env:PHONEBRIDGE_CLOUD_URL="https://your-render-service.onrender.com"
-npm run agent -- "YOUR_ONE_TIME_ENROLLMENT_TICKET"
+npm run agent -- "YOUR_SIX_DIGIT_PAIRING_CODE"
 ```
 
-The one-time ticket is exchanged for a per-device token, which is saved with owner-only permissions beneath `%LOCALAPPDATA%\PhoneBridge\Agent\cloud-device.json`. The worker polls the cloud command queue and only performs allowlisted workspace, system-information, and approved app actions. Its default workspace is `%USERPROFILE%\PhoneBridge`.
+The six-digit code is generated in the signed-in PhoneBridge workspace, expires after five minutes, and is single-use. Enter it in the Windows agent to approve the computer. It is exchanged for a per-device token, which is saved with owner-only permissions beneath `%LOCALAPPDATA%\PhoneBridge\Agent\cloud-device.json`. The worker polls the cloud command queue and only performs allowlisted workspace, system-information, and approved app actions. Its default workspace is `%USERPROFILE%\PhoneBridge`.
 
 ## WhatsApp verification
 WhatsApp is not a native Supabase Auth OTP channel. Add it only through an approved WhatsApp Business Platform/Meta Cloud API or a supported verification provider after business setup, templates, phone-number ownership, delivery and cost are configured. Never collect a WhatsApp password or pretend a WhatsApp code was sent when it was not.
 
 ## Important release boundary
-The current legacy Phone Bridge server still uses shared local JSON metadata and one shared files directory. This cloud app is an isolated authentication and data-model foundation, not yet a migration of the existing Drive, notes, sync, pairing, preview, audit or media endpoints. Do not connect legacy endpoints to public accounts until each endpoint is migrated to enforce the authenticated user's ID and the private storage policies are tested with two separate accounts. Keep the old private service running separately until migration and backup/restore tests are complete.
+The current legacy Phone Bridge server still uses shared local JSON metadata and one shared files directory. The cloud app now has its own account-bound outbound Windows-agent enrollment and pairing flow, but it is not yet a migration of the legacy Drive, notes, sync, preview, audit or media endpoints or the old local pairing-session protocol. Do not connect legacy endpoints to public accounts until each endpoint is migrated to enforce the authenticated user's ID and the private storage policies are tested with two separate accounts. Keep the old private service running separately until migration and backup/restore tests are complete.
 
 ## Security checklist before public launch
 - Configure production SMTP; verify confirmation and password-reset flows.

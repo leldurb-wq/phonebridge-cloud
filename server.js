@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
@@ -120,7 +120,24 @@ async function requireOwner(req, res) {
   }
 }
 
-// Owner creates a one-time enrollment ticket. The raw ticket is returned only once.
+// Owner-scoped device list for the main PhoneBridge workspace.
+app.get('/api/devices', rateLimit(60,60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user = await requireOwner(req,res);
+  if (!user) return;
+  if (!supabaseAdmin) return res.status(503).json({ok:false,error:'Device service is not configured.'});
+  try {
+    const {data:devices,error} = await supabaseAdmin.from('devices').select('id,name,device_type,created_at,device_agents(last_seen_at,enabled)').eq('user_id',user.id).order('created_at',{ascending:false});
+    if(error) throw error;
+    const now=Date.now();
+    return res.json({ok:true,devices:(devices||[]).map(d=>{
+      const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents;
+      const seen=agent?.last_seen_at||null;
+      return {id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:Boolean(agent?.enabled&&seen&&now-Date.parse(seen)<90000)};
+    })});
+  } catch (_) { return res.status(503).json({ok:false,error:'Could not load devices. Check the relay database migrations.'}); }
+});
+// Owner creates a short-lived six-digit pairing code. Only its hash is stored.
 app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user = await requireOwner(req,res);
@@ -129,14 +146,19 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   const deviceName = typeof req.body?.deviceName === 'string' ? req.body.deviceName.trim() : '';
   if (!deviceName || deviceName.length > 80) return res.status(400).json({ ok:false, error:'Device name must be between 1 and 80 characters.' });
   try {
-    const code = crypto.randomBytes(32).toString('base64url');
-    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const { error:cleanupError } = await supabaseAdmin.from('device_enrollments').delete().lt('expires_at',new Date().toISOString());
+    if (cleanupError) throw cleanupError;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    const { error } = await supabaseAdmin.from('device_enrollments').insert({ user_id:user.id, code_hash:codeHash, device_name:deviceName, expires_at:expiresAt });
-    if (error) throw error;
-    return res.status(201).json({ ok:true, enrollmentCode:code, expiresAt, expiresInSeconds:300 });
+    for (let attempt=0; attempt<5; attempt++) {
+      const code = crypto.randomInt(0,1000000).toString().padStart(6,'0');
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      const { error } = await supabaseAdmin.from('device_enrollments').insert({ user_id:user.id, code_hash:codeHash, device_name:deviceName, expires_at:expiresAt });
+      if (!error) return res.status(201).json({ ok:true, enrollmentCode:code, expiresAt, expiresInSeconds:300 });
+      if (error.code !== '23505') throw error;
+    }
+    throw new Error('Could not generate a unique pairing code.');
   } catch (_) {
-    return res.status(503).json({ ok:false, error:'Could not create an enrollment ticket. Check that the relay database migration has been applied.' });
+    return res.status(503).json({ ok:false, error:'Could not create a pairing code. Check that the relay database migration has been applied.' });
   }
 });
 
@@ -210,12 +232,12 @@ app.post('/api/agent/commands/:commandId/result', rateLimit(60,60*1000), async (
   } catch (_) { return res.status(503).json({ ok:false, error:'Could not submit command result. Check that relay migrations 002 and 003 are deployed.' }); }
 });
 
-// ThinkPad agent exchanges a one-time ticket for a long-lived per-device bearer token.
-app.post('/api/agent/enroll', rateLimit(10,10*60*1000), async (req,res)=>{
+// Windows agent redeems a one-time pairing code for a long-lived per-device bearer token.
+app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device enrollment service is not configured.' });
   const code = typeof req.body?.enrollmentCode === 'string' ? req.body.enrollmentCode : '';
-  if (!/^[A-Za-z0-9_-]{40,50}$/.test(code)) return res.status(400).json({ ok:false, error:'Invalid or expired enrollment ticket.' });
+  if (!/^\d{6}$/.test(code)) return res.status(400).json({ ok:false, error:'Enter the six-digit pairing code shown in PhoneBridge.' });
   const codeHash = crypto.createHash('sha256').update(code).digest('hex');
   try {
     const { data:ticket, error:findError } = await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();

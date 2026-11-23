@@ -11,8 +11,11 @@ let refreshTimer = null;
 let uiBound = false;
 
 function status(message, error = false) {
+  const className = 'message show' + (error ? ' error' : '');
   statusBox.textContent = message;
-  statusBox.className = 'message show' + (error ? ' error' : '');
+  statusBox.className = className;
+  const mainStatus = $('mainStatus');
+  if (mainStatus) { mainStatus.textContent = message; mainStatus.className = className; }
 }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -23,32 +26,37 @@ async function authHeaders() {
   return { authorization: 'Bearer ' + session.access_token, 'content-type': 'application/json' };
 }
 async function loadDevices() {
-  const { data, error } = await supabase.from('devices').select('id,name,device_type,last_seen_at,created_at').eq('user_id', currentUser.id).order('created_at', { ascending: false });
-  if (error) throw error;
+  const headers = await authHeaders();
+  const response = await fetch('/api/devices', { headers, cache: 'no-store' });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Could not load devices.');
+  const devices = result.devices || [];
+  $('mainDeviceList').innerHTML = devices.length ? devices.map(d => `<div class="command-row"><b>${escapeHtml(d.name)}</b><span>${d.connected ? 'Online' : 'Offline'}</span><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.lastSeenAt ? 'Last seen ' + escapeHtml(new Date(d.lastSeenAt).toLocaleString()) : 'Agent has not connected yet'}</small></div>`).join('') : '<p class="sub">No computer paired yet. Use Pair a computer to get started.</p>';
   const list = $('deviceList');
-  if (!data?.length) {
-    list.innerHTML = '<p class="sub">No devices enrolled yet. Add your ThinkPad below.</p>';
+  if (!devices.length) {
+    list.innerHTML = '<p class="sub">No devices paired yet. Start pairing from the main workspace.</p>';
     $('commandPanel').classList.add('hidden');
     return;
   }
-  list.innerHTML = data.map(d => `<label class="device-option"><input type="radio" name="device" value="${escapeHtml(d.id)}"><span><b>${escapeHtml(d.name)}</b><small>${escapeHtml(d.device_type)} · Added ${escapeHtml(new Date(d.created_at).toLocaleString())}</small></span></label>`).join('');
+  list.innerHTML = devices.map(d => `<label class="device-option"><input type="radio" name="device" value="${escapeHtml(d.id)}"><span><b>${escapeHtml(d.name)}</b><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.connected ? 'Online' : 'Offline'}</small></span></label>`).join('');
   list.querySelector('input')?.click();
   $('commandPanel').classList.remove('hidden');
 }
 async function createEnrollment() {
-  const name = $('deviceName').value.trim();
-  if (!name) return status('Enter a name for your ThinkPad.', true);
-  $('enrollButton').disabled = true;
+  const name = $('pairDeviceName').value.trim();
+  if (!name) return status('Enter a name for your computer.', true);
+  $('pairDeviceButton').disabled = true;
   try {
     const headers = await authHeaders();
     const response = await fetch('/api/enrollments', { method: 'POST', headers, body: JSON.stringify({ deviceName: name }) });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not create enrollment.');
-    $('ticket').value = data.enrollmentCode;
-    $('ticketPanel').classList.remove('hidden');
-    status('One-time enrollment ticket created. It expires in 5 minutes. Copy it and enter it locally on your ThinkPad.');
+    if (!response.ok) throw new Error(data.error || 'Could not start pairing.');
+    $('pairCode').value = data.enrollmentCode;
+    $('agentCommand').textContent = 'Double-click Start-PhoneBridge-Agent.cmd in the extracted agent folder, then enter the code shown above.';
+    $('pairCodePanel').classList.remove('hidden');
+    status('Six-digit code created. Enter it on the Windows computer to approve pairing. This page will refresh the device list while you wait.');
   } catch (e) { status(e.message, true); }
-  finally { $('enrollButton').disabled = false; }
+  finally { $('pairDeviceButton').disabled = false; }
 }
 async function queueCommand(action, payload = {}) {
   const deviceId = document.querySelector('input[name="device"]:checked')?.value;
@@ -94,11 +102,12 @@ async function runUi(action, payload) {
 }
 function bindUi() {
   markUnsupportedPanels();
-  $('enrollButton').addEventListener('click', createEnrollment);
-  $('copyTicket').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('ticket').value); status('Enrollment ticket copied. Paste it into the ThinkPad terminal only.'); }
-    catch { $('ticket').select(); status('Select and copy the ticket manually.'); }
+  $('pairDeviceButton').addEventListener('click', createEnrollment);
+  $('copyPairCode').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('pairCode').value); status('Six-digit pairing code copied. Enter it only on the Windows computer you want to approve.'); }
+    catch { $('pairCode').select(); status('Select and copy the pairing code manually.'); }
   });
+  $('mainRefreshDevices').addEventListener('click', async () => { try { await loadDevices(); status('Your paired devices are refreshed.'); } catch (e) { status(e.message, true); } });
   $('systemInfo').addEventListener('click', () => runUi('system_info'));
   $('listFiles').addEventListener('click', () => runUi('list_files', { path: '.' }));
   $('readFile').addEventListener('click', () => {
@@ -140,7 +149,7 @@ async function activateSession(session) {
   try {
     await loadDevices();
     await loadCommands();
-    refreshTimer = setInterval(() => loadCommands().catch(() => {}), 5000);
+    refreshTimer = setInterval(async () => { try { await loadDevices(); await loadCommands(); } catch (_) {} }, 10000);
   } catch (e) { status(e.message || 'Could not load your devices.', true); }
 }
 function deactivateSession() {

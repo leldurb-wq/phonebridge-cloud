@@ -121,9 +121,9 @@ async function enroll() {
   }
   const code = process.argv[2] || await new Promise(resolve=>{
     const rl=readline.createInterface({input:process.stdin,output:process.stdout});
-    rl.question('Paste the one-time enrollment ticket: ',answer=>{rl.close();resolve(answer.trim())});
+    rl.question('Enter the six-digit code shown in your PhoneBridge workspace to approve this computer: ',answer=>{rl.close();resolve(answer.trim())});
   });
-  if (!/^[A-Za-z0-9_-]{40,50}$/.test(code)) throw new Error('Invalid enrollment ticket.');
+  if (!/^\d{6}$/.test(code)) throw new Error('Enter the six-digit pairing code shown in PhoneBridge.');
   const result=await postJson('/api/agent/enroll',{enrollmentCode:code});
   if (!result || !uuidPattern.test(result.deviceId||'') || !/^[A-Za-z0-9_-]{40,50}$/.test(result.agentToken||'') || typeof result.deviceName!=='string') {
     throw new Error('Cloud enrollment response was invalid.');
