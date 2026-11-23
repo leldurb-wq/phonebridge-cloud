@@ -8,7 +8,10 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "check": "node --check server.js && node --check public/dashboard.js && node --check agent/cloud-worker.js",
+    "test": "npm run check",
+    "agent": "node agent/cloud-worker.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

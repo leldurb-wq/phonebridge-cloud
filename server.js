@@ -9,29 +9,86 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const appOrigin = (process.env.APP_ORIGIN || '').replace(/\/+$/, '');
+const missingSupabaseConfig = [];
+if (!/^https:\/\/.+\.supabase\.co\/?$/.test(supabaseUrl)) missingSupabaseConfig.push('SUPABASE_URL');
+if (!supabaseAnonKey || /YOUR_SUPABASE/i.test(supabaseAnonKey)) missingSupabaseConfig.push('SUPABASE_ANON_KEY');
+if (!serviceKey || /YOUR_SUPABASE/i.test(serviceKey)) missingSupabaseConfig.push('SUPABASE_SERVICE_ROLE_KEY');
+if (missingSupabaseConfig.length) {
+  console.warn('Configuration incomplete: ' + missingSupabaseConfig.join(', ') + '. Public configuration is disabled; /health remains available.');
+} else {
+  console.log('Supabase configuration loaded. Service-role credentials remain server-side.');
+}
 const supabaseAuth = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
   : null;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseAdmin = supabaseUrl && serviceKey
   ? createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
   : null;
-const screenFrames = new Map();
-const MAX_SCREEN_FRAME_BYTES = 16000;
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1100kb', strict: true }));
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:["'self'"],
+      scriptSrc:["'self'","'unsafe-inline'",'https://esm.sh'],
+      styleSrc:["'self'","'unsafe-inline'"],
+      imgSrc:["'self'",'data:','blob:','https:'],
+      connectSrc:["'self'",'https://*.supabase.co','wss://*.supabase.co'],
+      frameAncestors:["'none'"],
+      baseUri:["'self'"],
+      formAction:["'self'"]
+    }
+  },
+  crossOriginEmbedderPolicy:false
+}));
 app.use((req,res,next)=>{
   res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
   next();
 });
+app.use((req,res,next)=>{
+  if (appOrigin) {
+    const origin = req.get('origin');
+    if (origin) {
+      if (origin === appOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary','Origin');
+      } else {
+        return res.status(403).json({ok:false,error:'Cross-origin access is not allowed.'});
+      }
+    }
+  }
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
+    return res.status(204).end();
+  }
+  next();
+});
+const rateWindows = new Map();
+function rateLimit(max, windowMs) {
+  return (req,res,next)=>{
+    const key=(req.ip||req.socket.remoteAddress||'unknown')+':'+req.path;
+    const now=Date.now();
+    const window=rateWindows.get(key);
+    if (!window || now-window.startedAt>windowMs) {
+      rateWindows.set(key,{startedAt:now,count:1});
+      return next();
+    }
+    window.count++;
+    if (window.count>max) return res.status(429).json({ok:false,error:'Too many requests. Please wait and try again.'});
+    next();
+  };
+}
+setInterval(()=>{const cutoff=Date.now()-15*60*1000;for(const [key,value] of rateWindows)if(value.startedAt<cutoff)rateWindows.delete(key)},15*60*1000).unref();
 app.get('/health',(req,res)=>res.status(200).json({ok:true,service:'Phone Bridge Cloud',version:'1.0.0'}));
 app.get('/config',(req,res)=>{
   const url=process.env.SUPABASE_URL||'';
   const key=process.env.SUPABASE_ANON_KEY||'';
-  if(!url||!key||url.includes('YOUR_PROJECT'))return res.status(503).json({ready:false,message:'Cloud authentication is not configured yet.'});
+  if(missingSupabaseConfig.length)return res.status(503).json({ready:false,message:'Cloud authentication is not configured. Missing or invalid: '+missingSupabaseConfig.join(', ')+'.'});
   res.setHeader('Cache-Control','no-store');
   res.json({ready:true,supabaseUrl:url,supabaseAnonKey:key});
 });
@@ -64,7 +121,7 @@ async function requireOwner(req, res) {
 }
 
 // Owner creates a one-time enrollment ticket. The raw ticket is returned only once.
-app.post('/api/enrollments', async (req,res)=>{
+app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user = await requireOwner(req,res);
   if (!user) return;
@@ -83,44 +140,8 @@ app.post('/api/enrollments', async (req,res)=>{
   }
 });
 
-// Agent pushes small JPEG frames over authenticated HTTPS; only the owning account can read them.
-app.post('/api/agent/screen-frame', async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Screen relay is not configured.' });
-  const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
-  const token = /^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization') || '')?.[1] || '';
-  const imageBase64 = typeof req.body?.imageBase64 === 'string' ? req.body.imageBase64 : '';
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId) || !token) return res.status(401).json({ ok:false, error:'Device authentication required.' });
-  if (req.body?.mimeType !== 'image/jpeg' || !/^[A-Za-z0-9+/]+=*$/.test(imageBase64)) return res.status(400).json({ ok:false, error:'A valid JPEG frame is required.' });
-  const bytes = Buffer.from(imageBase64, 'base64');
-  if (bytes.length < 4 || bytes.length > MAX_SCREEN_FRAME_BYTES) return res.status(413).json({ ok:false, error:'Screen frame exceeds the relay limit.' });
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) return res.status(400).json({ ok:false, error:'Frame data is not a complete JPEG.' });
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  try {
-    const { data:agent, error } = await supabaseAdmin.from('device_agents').select('device_id').eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).maybeSingle();
-    if (error || !agent) return res.status(401).json({ ok:false, error:'Device authentication failed.' });
-    screenFrames.set(deviceId, { mimeType:'image/jpeg', imageBase64, capturedAt:new Date().toISOString() });
-    return res.status(204).end();
-  } catch (_) { return res.status(503).json({ ok:false, error:'Could not relay the screen frame.' }); }
-});
-
-app.get('/api/screen-frame', async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  const user = await requireOwner(req,res);
-  if (!user) return;
-  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Screen relay is not configured.' });
-  const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : '';
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
-  try {
-    const { data:device, error } = await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
-    if (error || !device) return res.status(404).json({ ok:false, error:'That device was not found in your account.' });
-    const frame = screenFrames.get(deviceId) || null;
-    return res.json({ ok:true, frame });
-  } catch (_) { return res.status(503).json({ ok:false, error:'Could not read the live screen frame.' }); }
-});
-
 // Owner-authenticated command queue. Mutating actions require an explicit UI approval flag.
-app.post('/api/commands', async (req,res)=>{
+app.post('/api/commands', rateLimit(30,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user = await requireOwner(req,res);
   if (!user) return;
@@ -128,21 +149,11 @@ app.post('/api/commands', async (req,res)=>{
   const { deviceId, action } = req.body || {};
   const payload = req.body?.payload === undefined ? {} : req.body.payload;
   const approved = req.body?.approved === true;
-  const allowed = ['system_info','screen_capture','screen_stream_start','screen_stream_keepalive','screen_stream_stop','desktop_control','list_files','read_file','write_file','create_folder','launch_app'];
+  const allowed = ['system_info','list_files','read_file','write_file','create_folder','launch_app'];
   if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
   if (!allowed.includes(action)) return res.status(400).json({ ok:false, error:'Action is not allowed.' });
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.status(400).json({ ok:false, error:'Task payload must be an object.' });
-  if (['write_file','create_folder','desktop_control'].includes(action) && !approved) return res.status(403).json({ ok:false, error:'This action requires explicit owner approval.' });
-  if (action === 'desktop_control') {
-    const p = payload;
-    const type = p.type;
-    if (!['move','click','scroll','key','type'].includes(type)) return res.status(400).json({ ok:false, error:'Unsupported desktop control.' });
-    if (['move','click'].includes(type) && (!Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)) return res.status(400).json({ ok:false, error:'Pointer coordinates must be between 0 and 1.' });
-    if (type === 'click' && !['left','right','middle'].includes(p.button || 'left')) return res.status(400).json({ ok:false, error:'Unsupported mouse button.' });
-    if (type === 'scroll' && (!Number.isInteger(p.delta) || p.delta === 0 || Math.abs(p.delta) > 1200)) return res.status(400).json({ ok:false, error:'Scroll amount is out of range.' });
-    if (type === 'type' && (typeof p.text !== 'string' || p.text.length > 300 || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(p.text))) return res.status(400).json({ ok:false, error:'Text is too long or contains unsupported control characters.' });
-    if (type === 'key' && (typeof p.key !== 'string' || p.key.length > 20 || !/^(?:(?:CTRL|ALT|SHIFT|WIN)\+)*(?:ENTER|ESC|TAB|BACKSPACE|DELETE|UP|DOWN|LEFT|RIGHT|HOME|END|PAGEUP|PAGEDOWN|SPACE|F5|F11|[A-Z0-9])$/i.test(p.key))) return res.status(400).json({ ok:false, error:'That key or shortcut is not allowed.' });
-  }
+  if (['write_file','create_folder'].includes(action) && !approved) return res.status(403).json({ ok:false, error:'This action requires explicit owner approval.' });
   const relativePath = payload.path;
   if (['list_files','read_file','write_file','create_folder'].includes(action)) {
     if (typeof relativePath !== 'string' || !relativePath.trim() || relativePath.length > 240 || path.isAbsolute(relativePath) || relativePath.split(/[\\\\/]+/).some(part => part === '..')) return res.status(400).json({ ok:false, error:'Use a safe relative path inside the PhoneBridge workspace.' });
@@ -162,7 +173,7 @@ app.post('/api/commands', async (req,res)=>{
 });
 
 // Device agent polls for one command using its per-device bearer token.
-app.post('/api/agent/commands/claim', async (req,res)=>{
+app.post('/api/agent/commands/claim', rateLimit(60,60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
   const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
@@ -178,7 +189,7 @@ app.post('/api/agent/commands/claim', async (req,res)=>{
   } catch (_) { return res.status(503).json({ ok:false, error:'Could not claim a command. Check that relay migrations 002 and 003 are deployed.' }); }
 });
 
-app.post('/api/agent/commands/:commandId/result', async (req,res)=>{
+app.post('/api/agent/commands/:commandId/result', rateLimit(60,60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
   const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
@@ -200,7 +211,7 @@ app.post('/api/agent/commands/:commandId/result', async (req,res)=>{
 });
 
 // ThinkPad agent exchanges a one-time ticket for a long-lived per-device bearer token.
-app.post('/api/agent/enroll', async (req,res)=>{
+app.post('/api/agent/enroll', rateLimit(10,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device enrollment service is not configured.' });
   const code = typeof req.body?.enrollmentCode === 'string' ? req.body.enrollmentCode : '';
@@ -227,6 +238,20 @@ app.post('/api/agent/enroll', async (req,res)=>{
   }
 });
 
-app.use(express.static(path.join(__dirname,'public'),{extensions:['html'],maxAge:process.env.NODE_ENV==='production'?'1h':0}));
+app.use(express.static(path.join(__dirname,'public'),{
+  extensions:['html'],
+  maxAge:process.env.NODE_ENV==='production'?'1h':0,
+  setHeaders(res,filePath){if(path.basename(filePath)==='dashboard.js')res.setHeader('Cache-Control','no-cache')}
+}));
 app.get(/.*/,(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+app.use((err,req,res,next)=>{
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ok:false,error:'Request body must be valid JSON.'});
+  }
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ok:false,error:'Request body is too large.'});
+  }
+  console.error('Unhandled server error:', err instanceof Error ? err.message : 'Unknown error');
+  return res.status(500).json({ok:false,error:'The request could not be completed.'});
+});
 app.listen(port,'0.0.0.0',()=>console.log('Phone Bridge Cloud listening on '+port));
