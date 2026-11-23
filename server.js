@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const path = require('path');
 const crypto = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { generatePairingCode, hashEnrollmentCode, hashLegacyPairingCode } = require('./agent/pairing-code');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -150,10 +151,10 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
     if (cleanupError) throw cleanupError;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     for (let attempt=0; attempt<5; attempt++) {
-      const code = crypto.randomInt(0,1000000).toString().padStart(6,'0');
-      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      const code = generatePairingCode();
+      const codeHash = hashEnrollmentCode(code,serviceKey);
       const { error } = await supabaseAdmin.from('device_enrollments').insert({ user_id:user.id, code_hash:codeHash, device_name:deviceName, expires_at:expiresAt });
-      if (!error) return res.status(201).json({ ok:true, enrollmentCode:code, expiresAt, expiresInSeconds:300 });
+      if (!error) return res.status(201).json({ ok:true, pairingCode:code, enrollmentCode:code, expiresAt, expiresInSeconds:300 });
       if (error.code !== '23505') throw error;
     }
     throw new Error('Could not generate a unique pairing code.');
@@ -237,24 +238,44 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device enrollment service is not configured.' });
   const code = typeof req.body?.enrollmentCode === 'string' ? req.body.enrollmentCode : '';
-  if (!/^\d{6}$/.test(code)) return res.status(400).json({ ok:false, error:'Enter the six-digit pairing code shown in PhoneBridge.' });
-  const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+  const isPairingCode=/^\d{6}$/.test(code);
+  if (!isPairingCode && !/^[A-Za-z0-9_-]{40,50}$/.test(code)) return res.status(400).json({ ok:false, error:'Enter the six-digit pairing code shown in PhoneBridge.' });
+  const codeHash = hashEnrollmentCode(code,serviceKey);
+  const previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:'';
+  if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
   try {
-    const { data:ticket, error:findError } = await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
-    if (findError || !ticket) return res.status(401).json({ ok:false, error:'Invalid or expired enrollment ticket.' });
+    let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
+    if(findError)throw findError;
+    // Accept six-digit codes issued by the immediately previous release while a
+    // rolling deployment is in progress; all newly issued codes use keyed HMAC.
+    if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
+    if (!ticket) return res.status(401).json({ ok:false, error:'Invalid or expired pairing code.' });
     const now = new Date().toISOString();
     const { data:claimed, error:claimError } = await supabaseAdmin.from('device_enrollments').update({ consumed_at:now }).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
-    if (claimError || !claimed) return res.status(409).json({ ok:false, error:'Enrollment ticket has already been used or expired.' });
-    const { data:device, error:deviceError } = await supabaseAdmin.from('devices').insert({ user_id:ticket.user_id, name:ticket.device_name, device_type:'windows_agent' }).select('id').single();
-    if (deviceError || !device) throw deviceError || new Error('Device record was not created.');
+    if (claimError || !claimed) return res.status(409).json({ ok:false, error:'Pairing code has already been used or expired.' });
     const agentToken = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(agentToken).digest('hex');
-    const { error:agentError } = await supabaseAdmin.from('device_agents').insert({ device_id:device.id, token_hash:tokenHash, enabled:true });
-    if (agentError) {
-      await supabaseAdmin.from('devices').delete().eq('id',device.id);
-      throw agentError;
+    let deviceId='';
+    if(previousDeviceId){
+      const {data:existing,error:lookupError}=await supabaseAdmin.from('devices').select('id').eq('id',previousDeviceId).eq('user_id',ticket.user_id).maybeSingle();
+      if(lookupError)throw lookupError;
+      if(existing){
+        deviceId=existing.id;
+        const {error:updateDeviceError}=await supabaseAdmin.from('devices').update({name:ticket.device_name,device_type:'windows_agent'}).eq('id',deviceId).eq('user_id',ticket.user_id);
+        if(updateDeviceError)throw updateDeviceError;
+        const {data:rotated,error:rotateError}=await supabaseAdmin.from('device_agents').update({token_hash:tokenHash,enabled:true,last_seen_at:null}).eq('device_id',deviceId).select('device_id').maybeSingle();
+        if(rotateError)throw rotateError;
+        if(!rotated){const {error:insertAgentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});if(insertAgentError)throw insertAgentError;}
+      }
     }
-    return res.status(201).json({ ok:true, deviceId:device.id, deviceName:ticket.device_name, agentToken });
+    if(!deviceId){
+      const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:ticket.device_name,device_type:'windows_agent'}).select('id').single();
+      if(deviceError||!device)throw deviceError||new Error('Device record was not created.');
+      deviceId=device.id;
+      const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
+      if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
+    }
+    return res.status(201).json({ ok:true, deviceId, deviceName:ticket.device_name, agentToken });
   } catch (_) {
     return res.status(503).json({ ok:false, error:'Device enrollment could not be completed.' });
   }

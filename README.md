@@ -40,7 +40,7 @@ Keep `SUPABASE_SERVICE_ROLE_KEY` only in Render's environment settings.
 1. Push this `cloud-app` directory to a private Git repository.
 2. Create a Render Web Service with root directory `cloud-app` (or use the included Blueprint).
 3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `APP_ORIGIN` as environment variables. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only; never put it in browser code or commit it to Git.
-4. Do not apply migration 004. It enables unsupported screen/desktop-control actions and is intentionally excluded from this release. Do not apply or rerun migrations without first confirming live migration state and approval.
+4. No new database migration is needed for pairing and credential recovery. Do not apply migration 004; it enables unsupported screen/desktop-control actions and is intentionally excluded from this release. Do not apply or rerun migrations without first confirming live migration state and approval.
 5. Deploy and verify `/health` and `/config`.
 6. Add the Render URL to Supabase Auth redirect allow-list.
 
@@ -56,7 +56,7 @@ $env:PHONEBRIDGE_CLOUD_URL="https://your-render-service.onrender.com"
 npm run agent -- "YOUR_SIX_DIGIT_PAIRING_CODE"
 ```
 
-The six-digit code is generated in the signed-in PhoneBridge workspace, expires after five minutes, and is single-use. Enter it in the Windows agent to approve the computer. It is exchanged for a per-device token, which is saved with owner-only permissions beneath `%LOCALAPPDATA%\PhoneBridge\Agent\cloud-device.json`. The worker polls the cloud command queue and only performs allowlisted workspace, system-information, and approved app actions. Its default workspace is `%USERPROFILE%\PhoneBridge`.
+The six-digit code is generated in the signed-in PhoneBridge workspace, expires after five minutes, and is single-use. Enter it in the Windows agent to approve the computer. It is exchanged for a per-device token, which is saved with owner-only permissions beneath `%LOCALAPPDATA%\PhoneBridge\Agent\cloud-device.json`. The agent accepts and repairs the existing ThinkPad credential format in place. If cloud access is revoked, it prompts for a new code and rotates the token on the existing owner-bound device record. The worker polls the cloud command queue and only performs allowlisted workspace, system-information, and approved app actions. Its default workspace is `%USERPROFILE%\PhoneBridge`.
 
 ## WhatsApp verification
 WhatsApp is not a native Supabase Auth OTP channel. Add it only through an approved WhatsApp Business Platform/Meta Cloud API or a supported verification provider after business setup, templates, phone-number ownership, delivery and cost are configured. Never collect a WhatsApp password or pretend a WhatsApp code was sent when it was not.

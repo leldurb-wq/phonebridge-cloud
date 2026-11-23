@@ -31,15 +31,16 @@ async function loadDevices() {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Could not load devices.');
   const devices = result.devices || [];
-  $('mainDeviceList').innerHTML = devices.length ? devices.map(d => `<div class="command-row"><b>${escapeHtml(d.name)}</b><span>${d.connected ? 'Online' : 'Offline'}</span><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.lastSeenAt ? 'Last seen ' + escapeHtml(new Date(d.lastSeenAt).toLocaleString()) : 'Agent has not connected yet'}</small></div>`).join('') : '<p class="sub">No computer paired yet. Use Pair a computer to get started.</p>';
+  $('mainDeviceList').innerHTML = devices.length ? devices.map(d => `<div class="command-row"><b>${escapeHtml(d.name)}</b><span>${d.connected ? 'Online' : 'Offline'}</span><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.lastSeenAt ? 'Last seen ' + escapeHtml(new Date(d.lastSeenAt).toLocaleString()) : 'Agent has not connected yet'}</small><button type="button" data-open-device="${escapeHtml(d.id)}">View computer</button></div>`).join('') : '<p class="sub">No computer paired yet. Use Pair a computer to get started.</p>';
   const list = $('deviceList');
   if (!devices.length) {
     list.innerHTML = '<p class="sub">No devices paired yet. Start pairing from the main workspace.</p>';
     $('commandPanel').classList.add('hidden');
     return;
   }
-  list.innerHTML = devices.map(d => `<label class="device-option"><input type="radio" name="device" value="${escapeHtml(d.id)}"><span><b>${escapeHtml(d.name)}</b><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.connected ? 'Online' : 'Offline'}</small></span></label>`).join('');
-  list.querySelector('input')?.click();
+  const selected=document.querySelector('input[name="device"]:checked')?.value;
+  list.innerHTML = devices.map(d => `<label class="device-option"><input type="radio" name="device" value="${escapeHtml(d.id)}" ${d.id===selected?'checked':''}><span><b>${escapeHtml(d.name)}</b><small>${escapeHtml(d.deviceType || 'Windows computer')} · ${d.connected ? 'Online' : 'Offline'}</small></span></label>`).join('');
+  if(!selected||!devices.some(d=>d.id===selected))list.querySelector('input')?.click();
   $('commandPanel').classList.remove('hidden');
 }
 async function createEnrollment() {
@@ -108,6 +109,7 @@ function bindUi() {
     catch { $('pairCode').select(); status('Select and copy the pairing code manually.'); }
   });
   $('mainRefreshDevices').addEventListener('click', async () => { try { await loadDevices(); status('Your paired devices are refreshed.'); } catch (e) { status(e.message, true); } });
+  $('mainDeviceList').addEventListener('click',event=>{const button=event.target.closest('[data-open-device]');if(!button)return;const radio=[...document.querySelectorAll('input[name="device"]')].find(item=>item.value===button.dataset.openDevice);if(radio)radio.click();appHome.classList.add('hidden');workspace.classList.remove('hidden');loadCommands().catch(e=>status(e.message,true));});
   $('systemInfo').addEventListener('click', () => runUi('system_info'));
   $('listFiles').addEventListener('click', () => runUi('list_files', { path: '.' }));
   $('readFile').addEventListener('click', () => {

@@ -7,6 +7,8 @@ const http = require('node:http');
 const https = require('node:https');
 const readline = require('node:readline');
 const { execFile, execFileSync } = require('node:child_process');
+const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, tokenPattern } = require('./credential-store');
+const { runReconnectLoop } = require('./reconnect-loop');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -27,7 +29,6 @@ if (fs.lstatSync(credentialDir).isSymbolicLink()) throw new Error('Agent credent
 const canonicalWorkspaceRoot = fs.realpathSync(workspaceRoot);
 const MAX_CLOUD_RESPONSE_BYTES = 1024 * 1024;
 const allowedActions = new Set(['system_info','list_files','read_file','write_file','create_folder','launch_app']);
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function secureCredentialPath(target, isDirectory) {
   if (process.platform === 'win32') {
@@ -76,7 +77,11 @@ function postJson(urlPath, body, token) {
         const data=Buffer.concat(chunks).toString('utf8');
         let parsed;
         try { parsed=JSON.parse(data); } catch (_) { parsed={ok:false,error:'Invalid response from cloud server.'}; }
-        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(parsed.error||'Cloud request failed.'));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          const error=new Error(parsed.error||'Cloud request failed.');
+          error.statusCode=res.statusCode;
+          return reject(error);
+        }
         resolve(parsed);
       });
     });
@@ -109,30 +114,44 @@ function safePath(relativePath) {
   return resolved;
 }
 
-async function enroll() {
-  if (fs.existsSync(credentialPath)) {
-    if (fs.lstatSync(credentialPath).isSymbolicLink()) throw new Error('Agent credential file must not be a symbolic link.');
-    secureCredentialPath(credentialPath,false);
-    const credentials=JSON.parse(fs.readFileSync(credentialPath,'utf8'));
-    if (!uuidPattern.test(credentials.deviceId||'') || !/^[A-Za-z0-9_-]{40,50}$/.test(credentials.agentToken||'') || typeof credentials.deviceName!=='string') {
-      throw new Error('Stored agent credentials are invalid. Remove the local credential file and enroll this device again.');
+function askForCode(prompt) {
+  return new Promise(resolve=>{
+    const rl=readline.createInterface({input:process.stdin,output:process.stdout});
+    rl.question(prompt,answer=>{rl.close();resolve(answer.trim())});
+  });
+}
+
+async function enroll({ previous = null, useCommandLineTicket = false } = {}) {
+  const arg=useCommandLineTicket ? (process.argv[2]||'') : '';
+  const installationId=previous?.installationId||crypto.randomUUID();
+  let code=(arg||await askForCode('Enter the six-digit PhoneBridge pairing code: ')).trim();
+  while(true){
+    if (!/^\d{6}$/.test(code) && !tokenPattern.test(code)) {
+      console.error('Pairing code format is invalid. Generate a new six-digit code.');
+      code=await askForCode('Enter a new PhoneBridge pairing code: ');
+      continue;
     }
+    let result;
+    try { result=await postJson('/api/agent/enroll',{enrollmentCode:code,installationId,previousDeviceId:previous?.deviceId||null}); }
+    catch(error){
+      if([400,401,409].includes(error.statusCode)){
+        console.error(error.message+' Generate a new code in the PhoneBridge workspace.');
+        code=await askForCode('Enter a new PhoneBridge pairing code: ');
+        continue;
+      }
+      if(!error.statusCode){console.error('Cloud unavailable during enrollment; retrying the same code in 5 seconds.');await new Promise(resolve=>setTimeout(resolve,5000));continue;}
+      throw error;
+    }
+    if (!result || !uuidPattern.test(result.deviceId||'') || !tokenPattern.test(result.agentToken||'') || typeof result.deviceName!=='string') {
+      console.error('Cloud enrollment response was invalid. Generate a new pairing code.');
+      code=await askForCode('Enter a new PhoneBridge pairing code: ');
+      continue;
+    }
+    const credentials=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,installationId,cloudUrl,enrolledAt:new Date().toISOString()});
+    writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
+    console.log('Enrolled as '+credentials.deviceName+'. Credentials saved securely.');
     return credentials;
   }
-  const code = process.argv[2] || await new Promise(resolve=>{
-    const rl=readline.createInterface({input:process.stdin,output:process.stdout});
-    rl.question('Enter the six-digit code shown in your PhoneBridge workspace to approve this computer: ',answer=>{rl.close();resolve(answer.trim())});
-  });
-  if (!/^\d{6}$/.test(code)) throw new Error('Enter the six-digit pairing code shown in PhoneBridge.');
-  const result=await postJson('/api/agent/enroll',{enrollmentCode:code});
-  if (!result || !uuidPattern.test(result.deviceId||'') || !/^[A-Za-z0-9_-]{40,50}$/.test(result.agentToken||'') || typeof result.deviceName!=='string') {
-    throw new Error('Cloud enrollment response was invalid.');
-  }
-  const credentials={deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken};
-  fs.writeFileSync(credentialPath,JSON.stringify(credentials,null,2),{mode:0o600,flag:'wx'});
-  secureCredentialPath(credentialPath,false);
-  console.log('Enrolled as '+credentials.deviceName+'. Credentials saved locally.');
-  return credentials;
 }
 
 async function execute(command) {
@@ -177,23 +196,39 @@ async function execute(command) {
 }
 
 async function main() {
-  const credentials=await enroll();
-  console.log('PhoneBridge outbound worker is running.');
-  setInterval(async()=>{
+  let credentials;
+  if (fs.existsSync(credentialPath)) {
     try {
-      const claimed=await postJson('/api/agent/commands/claim',{deviceId:credentials.deviceId},credentials.agentToken);
-      if (!claimed.command) return;
-      if (!uuidPattern.test(claimed.command.id||'')) throw new Error('Cloud returned a command with an invalid ID.');
-      try {
-        const result=await execute(claimed.command);
-        await postJson('/api/agent/commands/'+claimed.command.id+'/result',{deviceId:credentials.deviceId,success:true,result},credentials.agentToken);
-      } catch (error) {
-        await postJson('/api/agent/commands/'+claimed.command.id+'/result',{deviceId:credentials.deviceId,success:false,error:String(error.message||error).slice(0,500)},credentials.agentToken);
-      }
+      secureCredentialPath(credentialPath,false);
+      credentials=readCredentials(credentialPath);
+      if(credentials.cloudUrl&&credentials.cloudUrl!==parsedCloudUrl.origin)throw new Error('Saved cloud URL does not match PHONEBRIDGE_CLOUD_URL.');
+      writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
     } catch (error) {
-      console.error(error.message);
+      if(error.message.includes('symbolic link')||error.message.includes('Saved cloud URL does not match'))throw error;
+      console.error('Saved agent credentials could not be read. Re-pair this computer to recover.');
+      credentials=await enroll({useCommandLineTicket:false});
     }
-  },3000);
+  } else credentials=await enroll({useCommandLineTicket:true});
+  console.log('PhoneBridge outbound worker is running.');
+  await runReconnectLoop({
+    credentials,
+    claim:current=>postJson('/api/agent/commands/claim',{deviceId:current.deviceId},current.agentToken),
+    reEnroll:previous=>{console.error('This computer’s saved cloud access was revoked or expired. Generate a new pairing code in your PhoneBridge account to reconnect.');return enroll({previous});},
+    onCommand:async(command,current)=>{
+      if(!uuidPattern.test(command.id||''))throw new Error('Cloud returned a command with an invalid ID.');
+      try {
+        const result=await execute(command);
+        await postJson('/api/agent/commands/'+command.id+'/result',{deviceId:current.deviceId,success:true,result},current.agentToken);
+      } catch(error) {
+        await postJson('/api/agent/commands/'+command.id+'/result',{deviceId:current.deviceId,success:false,error:String(error.message||error).slice(0,500)},current.agentToken);
+      }
+    },
+    sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+    report:(kind,error)=>{
+      if(kind==='enroll-error')console.error('Re-pairing failed: '+error.message);
+      else if(kind==='network')console.error('Cloud connection unavailable; retrying automatically. ('+(error.code||error.message||'network error')+')');
+    }
+  });
 }
 
 main().catch(error=>{console.error(error.message);process.exit(1)});
