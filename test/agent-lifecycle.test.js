@@ -9,6 +9,9 @@ const crypto=require('node:crypto');
 const {generatePairingCode,hashEnrollmentCode,hashLegacyPairingCode}=require('../agent/pairing-code');
 const {normalizeCredentials,readCredentials,writeCredentials}=require('../agent/credential-store');
 const {runReconnectLoop}=require('../agent/reconnect-loop');
+const {redeemPairingCode}=require('../agent/enrollment');
+const {isDeviceOnline,ONLINE_WINDOW_MS}=require('../agent/device-status');
+const {getClientAddress}=require('../agent/client-address');
 
 const valid={deviceId:'dd85c046-d2a3-4a19-909c-209e344b30a6',deviceName:'ThinkPad',agentToken:'A'.repeat(43),installationId:'4892a34b-e54b-4dd9-9c34-f04ac01a45af'};
 const pause=async()=>{};
@@ -24,6 +27,35 @@ test('pairing enrollment issues a six digit code and stores only a keyed hash',(
     assert.notEqual(stored,crypto.createHash('sha256').update(code).digest('hex'));
     assert.equal(hashLegacyPairingCode(code),crypto.createHash('sha256').update(code).digest('hex'));
   }
+});
+
+test('fresh pairing exchanges the six-digit code and creates a valid persistent agent credential',async()=>{
+  let sent;
+  const code='004271';
+  const enrolled=await redeemPairingCode({code,cloudUrl:'https://phonebridge-cloud.onrender.com',exchange:async payload=>{
+    sent=payload;
+    return {deviceId:valid.deviceId,deviceName:'ThinkPad T430',agentToken:valid.agentToken};
+  }});
+  assert.equal(sent.enrollmentCode,code);
+  assert.equal(sent.previousDeviceId,null);
+  assert.match(sent.installationId,/^[0-9a-f-]{36}$/i);
+  assert.equal(enrolled.deviceId,valid.deviceId);
+  assert.equal(enrolled.agentToken,valid.agentToken);
+  assert.equal(enrolled.deviceName,'ThinkPad T430');
+  assert.equal(enrolled.cloudUrl,'https://phonebridge-cloud.onrender.com');
+});
+
+test('re-enrollment preserves the installed agent identity and returns malformed responses as invalid',async()=>{
+  let sent;
+  const previous={...valid,cloudUrl:'https://phonebridge-cloud.onrender.com'};
+  const enrolled=await redeemPairingCode({code:'912345',previous,cloudUrl:previous.cloudUrl,exchange:async payload=>{
+    sent=payload;
+    return {deviceId:valid.deviceId,deviceName:'ThinkPad T430',agentToken:'B'.repeat(43)};
+  }});
+  assert.equal(sent.previousDeviceId,valid.deviceId);
+  assert.equal(sent.installationId,valid.installationId);
+  assert.equal(enrolled.installationId,valid.installationId);
+  assert.equal(await redeemPairingCode({code:'123456',cloudUrl:previous.cloudUrl,exchange:async()=>({deviceId:'bad',agentToken:'bad',deviceName:''})}),null);
 });
 
 test('canonical credentials survive a worker restart and authenticate with the stored token',async()=>{
@@ -77,6 +109,22 @@ test('network interruptions retry the saved credential without forcing enrollmen
   const controller=new AbortController();let calls=0,waits=[];
   await runReconnectLoop({credentials:valid,claim:async()=>{calls++;if(calls===1){const e=new Error('offline');e.code='ECONNRESET';throw e;}controller.abort();return{};},reEnroll:async()=>assert.fail('transient network loss must preserve credentials'),onCommand:async()=>{},sleep:async ms=>waits.push(ms),report:()=>{},signal:controller.signal});
   assert.equal(calls,2);assert.deepEqual(waits,[5000,3000]);
+});
+
+test('device heartbeat status is online only for enabled agents with a recent non-future heartbeat',()=>{
+  const now=Date.parse('2026-11-23T12:00:00.000Z');
+  assert.equal(isDeviceOnline(true,new Date(now-10_000).toISOString(),now),true);
+  assert.equal(isDeviceOnline(true,new Date(now-ONLINE_WINDOW_MS).toISOString(),now),false);
+  assert.equal(isDeviceOnline(false,new Date(now-1_000).toISOString(),now),false);
+  assert.equal(isDeviceOnline(true,new Date(now+60_000).toISOString(),now),false);
+  assert.equal(isDeviceOnline(true,'invalid',now),false);
+});
+
+test('Render rate limits use the validated Cloudflare client address instead of one shared proxy address',()=>{
+  const req={headers:{'cf-connecting-ip':'203.0.113.24'},ip:'10.0.0.5'};
+  assert.equal(getClientAddress(req,true),'203.0.113.24');
+  assert.equal(getClientAddress(req,false),'10.0.0.5');
+  assert.equal(getClientAddress({headers:{'cf-connecting-ip':'not-an-ip'},ip:'10.0.0.5'},true),'10.0.0.5');
 });
 
 test('failed re-enrollment does not keep retrying a known invalid token',async()=>{

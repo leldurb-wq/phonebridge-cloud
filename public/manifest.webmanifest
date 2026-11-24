@@ -1,0 +1,24 @@
+{
+  "name": "Phone Bridge",
+  "short_name": "Phone Bridge",
+  "description": "Phone Bridge cloud workspace. Pairing and device status are available; file and streaming features are still being migrated.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050914",
+  "theme_color": "#050914",
+  "icons": [
+    {
+      "src": "/icons/phonebridge-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/phonebridge-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

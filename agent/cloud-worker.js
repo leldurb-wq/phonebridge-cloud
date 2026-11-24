@@ -8,6 +8,7 @@ const https = require('node:https');
 const readline = require('node:readline');
 const { execFile, execFileSync } = require('node:child_process');
 const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, tokenPattern } = require('./credential-store');
+const { redeemPairingCode } = require('./enrollment');
 const { runReconnectLoop } = require('./reconnect-loop');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
@@ -123,7 +124,6 @@ function askForCode(prompt) {
 
 async function enroll({ previous = null, useCommandLineTicket = false } = {}) {
   const arg=useCommandLineTicket ? (process.argv[2]||'') : '';
-  const installationId=previous?.installationId||crypto.randomUUID();
   let code=(arg||await askForCode('Enter the six-digit PhoneBridge pairing code: ')).trim();
   while(true){
     if (!/^\d{6}$/.test(code) && !tokenPattern.test(code)) {
@@ -131,23 +131,22 @@ async function enroll({ previous = null, useCommandLineTicket = false } = {}) {
       code=await askForCode('Enter a new PhoneBridge pairing code: ');
       continue;
     }
-    let result;
-    try { result=await postJson('/api/agent/enroll',{enrollmentCode:code,installationId,previousDeviceId:previous?.deviceId||null}); }
+    let credentials;
+    try { credentials=await redeemPairingCode({code,previous,cloudUrl,exchange:payload=>postJson('/api/agent/enroll',payload)}); }
     catch(error){
       if([400,401,409].includes(error.statusCode)){
         console.error(error.message+' Generate a new code in the PhoneBridge workspace.');
         code=await askForCode('Enter a new PhoneBridge pairing code: ');
         continue;
       }
-      if(!error.statusCode){console.error('Cloud unavailable during enrollment; retrying the same code in 5 seconds.');await new Promise(resolve=>setTimeout(resolve,5000));continue;}
+      if(!error.statusCode||error.statusCode===408||error.statusCode===425||error.statusCode===429||error.statusCode>=500){console.error('Cloud unavailable during enrollment; retrying the same code in 5 seconds.');await new Promise(resolve=>setTimeout(resolve,5000));continue;}
       throw error;
     }
-    if (!result || !uuidPattern.test(result.deviceId||'') || !tokenPattern.test(result.agentToken||'') || typeof result.deviceName!=='string') {
+    if (!credentials) {
       console.error('Cloud enrollment response was invalid. Generate a new pairing code.');
       code=await askForCode('Enter a new PhoneBridge pairing code: ');
       continue;
     }
-    const credentials=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,installationId,cloudUrl,enrolledAt:new Date().toISOString()});
     writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
     console.log('Enrolled as '+credentials.deviceName+'. Credentials saved securely.');
     return credentials;
