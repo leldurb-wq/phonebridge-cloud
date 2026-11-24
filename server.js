@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { generatePairingCode, hashEnrollmentCode, hashLegacyPairingCode } = require('./agent/pairing-code');
+const { isDeviceOnline } = require('./agent/device-status');
+const { getClientAddress } = require('./agent/client-address');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -64,15 +66,15 @@ app.use((req,res,next)=>{
   }
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
-    res.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS');
     return res.status(204).end();
   }
   next();
 });
 const rateWindows = new Map();
-function rateLimit(max, windowMs) {
+function rateLimit(max, windowMs, scope = req=>getClientAddress(req)) {
   return (req,res,next)=>{
-    const key=(req.ip||req.socket.remoteAddress||'unknown')+':'+req.path;
+    const key=scope(req)+':'+req.path;
     const now=Date.now();
     const window=rateWindows.get(key);
     if (!window || now-window.startedAt>windowMs) {
@@ -134,10 +136,42 @@ app.get('/api/devices', rateLimit(60,60*1000), async (req,res)=>{
     return res.json({ok:true,devices:(devices||[]).map(d=>{
       const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents;
       const seen=agent?.last_seen_at||null;
-      return {id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:Boolean(agent?.enabled&&seen&&now-Date.parse(seen)<90000)};
+      return {id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now)};
     })});
   } catch (_) { return res.status(503).json({ok:false,error:'Could not load devices. Check the relay database migrations.'}); }
 });
+// Owner-scoped device management. Device IDs are never accepted without an authenticated owner check.
+app.patch('/api/devices/:deviceId', rateLimit(20,10*60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);
+  if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
+  const deviceId=req.params.deviceId;
+  const name=typeof req.body?.name==='string'?req.body.name.trim():'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a valid device.'});
+  if(!name||name.length>80)return res.status(400).json({ok:false,error:'Device name must be between 1 and 80 characters.'});
+  try{
+    const {data,error}=await supabaseAdmin.from('devices').update({name}).eq('id',deviceId).eq('user_id',user.id).select('id,name').maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(404).json({ok:false,error:'That device was not found in your account.'});
+    return res.json({ok:true,device:{id:data.id,name:data.name}});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not rename this device.'});}
+});
+app.delete('/api/devices/:deviceId', rateLimit(10,10*60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);
+  if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
+  const deviceId=req.params.deviceId;
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a valid device.'});
+  try{
+    const {data,error}=await supabaseAdmin.from('devices').delete().eq('id',deviceId).eq('user_id',user.id).select('id').maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(404).json({ok:false,error:'That device was not found in your account.'});
+    return res.json({ok:true,revoked:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not revoke this device.'});}
+});
+
 // Owner creates a short-lived six-digit pairing code. Only its hash is stored.
 app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -196,7 +230,11 @@ app.post('/api/commands', rateLimit(30,10*60*1000), async (req,res)=>{
 });
 
 // Device agent polls for one command using its per-device bearer token.
-app.post('/api/agent/commands/claim', rateLimit(60,60*1000), async (req,res)=>{
+const agentRateScope=req=>{
+  const token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
+  return token?'agent:'+crypto.createHash('sha256').update(token).digest('hex'):getClientAddress(req);
+};
+app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
   const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
@@ -212,7 +250,7 @@ app.post('/api/agent/commands/claim', rateLimit(60,60*1000), async (req,res)=>{
   } catch (_) { return res.status(503).json({ ok:false, error:'Could not claim a command. Check that relay migrations 002 and 003 are deployed.' }); }
 });
 
-app.post('/api/agent/commands/:commandId/result', rateLimit(60,60*1000), async (req,res)=>{
+app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
   const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
@@ -280,6 +318,9 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
     return res.status(503).json({ ok:false, error:'Device enrollment could not be completed.' });
   }
 });
+
+// Unknown legacy/local APIs must not fall through to the SPA and look successful.
+app.use('/api',(req,res)=>res.status(501).json({ok:false,error:'This API is not available in the cloud application yet.'}));
 
 app.use(express.static(path.join(__dirname,'public'),{
   extensions:['html'],

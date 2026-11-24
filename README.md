@@ -22,27 +22,30 @@ Required environment variables:
 - `SUPABASE_URL`: Supabase project URL.
 - `SUPABASE_ANON_KEY`: browser-safe anon/publishable key.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only secret key. Never place it in browser code, `.env.example`, Git, or logs.
-- `APP_ORIGIN`: exact public Render URL, for example `https://phone-bridge.onrender.com`.
+- `APP_ORIGIN`: exact public Render URL, `https://phonebridge-cloud.onrender.com` for the existing production service.
 - `PORT`: supplied automatically by Render.
 
 Keep `SUPABASE_SERVICE_ROLE_KEY` only in Render's environment settings.
 
 ## Supabase setup
-1. Create a Supabase project.
-2. In SQL Editor, review and run migration `001_phone_bridge_multiuser.sql` only if its tables, policies, and trigger are not already present.
-3. Authentication > URL Configuration: set the production Site URL and add the Render URL to Redirect URLs.
-4. Enable Email provider and configure SMTP for production email delivery. Use a verified sender domain.
-5. Enable Google provider and configure Google OAuth client ID/secret and the Supabase callback URL in Google Cloud Console.
-6. Enable Phone provider and configure an SMS provider supported by Supabase Auth. Test Ghana (+233) delivery and rate limits.
-7. Do not enable public registration until SMTP, OAuth, SMS, RLS, and storage policies have been tested.
+1. Open the existing PhoneBridge project in the Supabase Dashboard. Do not create a new project.
+2. Get the project URL from its **Connect** dialog. Get the `anon` and `service_role` keys from **Project Settings > API Keys**. Set them as `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the appropriate environments. The anon key is intended for browser use with RLS enabled. The service-role key bypasses RLS: keep it only on the trusted server (for example, in Render's environment settings), never expose it in browser code, and never commit it to Git.
+3. Before touching the database, compare Supabase migration history and the live schema with the migration files. The base `devices` table and owner RLS from `001_phone_bridge_multiuser.sql` are required.
+4. Cloud Windows Agent pairing and tasks additionally require `002_device_command_relay.sql` (agent credentials, one-use enrollments, task queue, grants and RLS), followed by `003_device_relay_functions.sql` (service-role-only claim and completion RPCs). Review and apply migrations in order `001` → `002` → `003` only with approval. Render does not run database migrations automatically. If any are already applied, do not rerun blindly.
+5. Authentication > URL Configuration: set the production Site URL and add the Render URL to Redirect URLs.
+6. Enable Email provider and configure SMTP for production email delivery. Use a verified sender domain.
+7. Enable Google provider and configure Google OAuth client ID/secret and the Supabase callback URL in Google Cloud Console.
+8. Enable Phone provider and configure an SMS provider supported by Supabase Auth. Test Ghana (+233) delivery and rate limits.
+9. Do not enable public registration until SMTP, OAuth, SMS, RLS, and storage policies have been tested.
 
 ## Render setup
-1. Push this `cloud-app` directory to a private Git repository.
-2. Create a Render Web Service with root directory `cloud-app` (or use the included Blueprint).
-3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `APP_ORIGIN` as environment variables. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only; never put it in browser code or commit it to Git.
-4. No new database migration is needed for pairing and credential recovery. Do not apply migration 004; it enables unsupported screen/desktop-control actions and is intentionally excluded from this release. Do not apply or rerun migrations without first confirming live migration state and approval.
-5. Deploy and verify `/health` and `/config`.
-6. Add the Render URL to Supabase Auth redirect allow-list.
+1. Use the existing Render web service `phonebridge-cloud` at `https://phonebridge-cloud.onrender.com`. Do not create another service for this checkout.
+2. The production entry point is `server.js`; the service build command is `npm ci` and its start command is `npm start`.
+3. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `APP_ORIGIN=https://phonebridge-cloud.onrender.com` in that existing service's environment. Keep `SUPABASE_SERVICE_ROLE_KEY` server-side only; never put it in browser code or commit it to Git.
+4. The included `render.yaml` currently names a service `phone-bridge`, so do not use/sync that Blueprint for the existing `phonebridge-cloud` service unless its service identity is first reconciled.
+5. Render does not apply database migrations. Pairing and Agent tasks remain unavailable until migrations 001, 002 and 003 are confirmed in place. This repository contains no migration 004.
+6. Deploy only after configuration and migration state are reviewed, then verify `/health` and `/config` without copying the returned anon key into logs or reports.
+7. Add the Render URL to Supabase Auth redirect allow-list.
 
 ## ThinkPad outbound worker
 
