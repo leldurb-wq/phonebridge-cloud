@@ -1499,6 +1499,28 @@ body[data-page="session"] .topbar{margin:0 0 20px;border:0;border-bottom:1px sol
 @media(max-width:620px){body[data-page="session"] .shell{width:calc(100% - 18px);padding-bottom:12px!important}body[data-page="session"] .topbar{margin-bottom:10px;padding:10px 12px}.session-review-page{min-height:calc(100svh - 88px);padding:22px 15px;border-radius:19px}.session-review-heading{margin-bottom:24px}.session-review-heading h1{font-size:clamp(39px,12vw,55px)}.session-review-heading>p{font-size:11px}.session-review-card{padding:15px}.session-review-card-actions{flex-direction:column}.session-continue-button,.session-revoke-button{width:100%}.session-review-actions{align-items:stretch;flex-direction:column}.session-pair-another{width:100%}.session-review-foot{flex-direction:column;font-size:6px}}
 @media(prefers-reduced-motion:reduce){.session-continue-button,.session-revoke-button,.session-pair-another{transition:none!important}}
 </style>
+<style id="pbx-performance-optimizations">
+/* Keep the cinematic workspace responsive on older dual-core PCs and power-saving browsers. */
+html.pb-performance-mode body[data-page="overview"] .topbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.pb-performance-mode #dynamicWorkspace:before,
+html.pb-performance-mode #dynamicWorkspace:after{display:none!important;animation:none!important}
+html.pb-performance-mode .pbx-ambient,
+html.pb-performance-mode .pbx-visual-halo{display:none!important;filter:none!important}
+html.pb-performance-mode .pbx-secure i,
+html.pb-performance-mode .pbx-orbit,
+html.pb-performance-mode .pbx-core,
+html.pb-performance-mode .pbx-core i,
+html.pb-performance-mode .pbx-node,
+html.pb-performance-mode .pbx-connection-line,
+html.pb-performance-mode .pbx-feature,
+html.pb-performance-mode .pbx-hero-copy,
+html.pb-performance-mode .pbx-visual,
+html.pb-performance-mode body[data-page="overview"] #workspace>#dynamicWorkspace{animation:none!important;transition:none!important;filter:none!important}
+html.pb-performance-mode .pbx-feature{opacity:1!important;transform:none!important}
+html.pb-performance-mode .pbx-feature.is-limited{opacity:.74!important}
+html.pb-performance-mode .pbx-hero-copy h1 em{filter:none!important}
+html.pb-performance-mode body[data-page="overview"] #workspace>#dynamicWorkspace{box-shadow:none!important}
+</style>
 <section id="workspace" class="hidden">
  <section id="dynamicWorkspace" aria-label="PhoneBridge connected workspace">
  <div class="pbx-backdrop" aria-hidden="true"><i class="pbx-starfield"></i><i class="pbx-ambient pbx-ambient-one"></i><i class="pbx-ambient pbx-ambient-two"></i></div>
@@ -1579,6 +1601,8 @@ body[data-page="session"] .topbar{margin:0 0 20px;border:0;border-bottom:1px sol
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
+const pbLowPowerDevice=(Number(navigator.hardwareConcurrency||0)>0&&Number(navigator.hardwareConcurrency)<=4)||(Number(navigator.deviceMemory||0)>0&&Number(navigator.deviceMemory)<=4)||navigator.connection?.saveData===true;
+if(pbLowPowerDevice)document.documentElement.classList.add('pb-performance-mode');
 let info=null,legacyToken='',pendingId=null,isHost=false,pollTimer=null,toastTimer=null,heartbeatTimer=null,heartbeatBusy=false,heartbeatDelay=20000,deviceRefreshTimer=null,hostMonitorTimer=null,deferredInstallPrompt=null,accountSupabase=null,accountSession=null,accountStarted=false,phoneClient=false,transferClientId='',transferClientTimer=null,transferInboxTimer=null,transferHistoryTimer=null,transferPhones=[],transferHistoryItems=[];const activePhoneTransfers=new Set(),transferObjectUrls=new Map();
 const say=(id,s)=>{const e=$(id);if(e)e.textContent=s};
 function setBridgeStatus(label){const e=$('status');if(e)e.innerHTML='<i class="dot"></i> '+label}
@@ -1633,7 +1657,7 @@ async function init(){
   $('cloudStageNotice').hidden=false;$('setupOverall').textContent='Cloud connection';
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
-  const initialDevices=await loadDevices();await ensureTransferClient();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);if(!transferClientTimer)transferClientTimer=setInterval(heartbeatTransferClient,20000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden)loadTransferHistory()},10000);await loadTransferHistory();if(phoneClient)await pollPhoneInbox();
+  await ensureTransferClient();const [initialDevices]=await Promise.all([loadDevices(),loadTransferPhones()]);if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(()=>{if(document.hidden)return;if(['overview','computer','session','pairing','transfer'].includes(document.body.dataset.page))loadDevices()},30000);if(!transferClientTimer)transferClientTimer=setInterval(()=>{if(!document.hidden)heartbeatTransferClient()},30000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden&&document.body.dataset.page==='transfer')loadTransferHistory()},30000);if(phoneClient)await pollPhoneInbox();
   renderCurrentSessions(initialDevices);const requested=location.hash.slice(1);showPage(initialDevices===null||initialDevices?.length?'session':pageNames.includes(requested)?requested:'welcome')
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
@@ -1729,7 +1753,7 @@ async function retryConnection(){
 $('connectionRetry').onclick=retryConnection;
 window.addEventListener('offline',()=>{if(accountStarted){setBridgeStatus('Offline');setConnectionState('offline','You are offline','The PhoneBridge workspace remains open. Device status will refresh when your internet connection returns.');return}setBridgeStatus('Offline');setConnectionState('offline','You are offline','The app shell can still open, but file transfers, notes and sync need your ThinkPad. Reconnect to your private network when ready.')});
 window.addEventListener('online',()=>{setBridgeStatus('Reconnecting');setConnectionState('reconnecting','Network restored','Checking the secure connection to your ThinkPad…');retryConnection()});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)return;if(accountStarted){loadDevices();return}if(!isHost){if(heartbeatTimer){clearTimeout(heartbeatTimer);heartbeatTimer=null}heartbeatDelay=1000;startHeartbeat()}else retryConnection()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)return;if(accountStarted){if(['overview','computer','session','pairing'].includes(document.body.dataset.page))loadDevices();if(document.body.dataset.page==='transfer'){loadTransferHistory();if(phoneClient)loadDevices();else loadTransferPhones()}return}if(!isHost){if(heartbeatTimer){clearTimeout(heartbeatTimer);heartbeatTimer=null}heartbeatDelay=1000;startHeartbeat()}else retryConnection()});
 $('disconnect').onclick=async()=>{if(heartbeatTimer)clearTimeout(heartbeatTimer);try{await api('/api/session',{method:'DELETE'})}catch{}legacyToken='';location.reload()};
 $('workspaceRefresh').onclick=async()=>{await refresh();await loadNote();toast('Workspace refreshed')};
 let screenRunning=false,screenTimer=null;
@@ -1787,12 +1811,11 @@ async function ensureTransferClient(){
   try{transferClientId=localStorage.getItem('phonebridge-transfer-client-id')||''}catch{}
   if(!/^[0-9a-f-]{36}$/i.test(transferClientId)){transferClientId=crypto.randomUUID();try{localStorage.setItem('phonebridge-transfer-client-id',transferClientId)}catch{}}
   await api('/api/transfer-clients/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:transferClientId,deviceType:phoneClient?'phone':'computer',label:transferClientLabel()})});
-  await loadTransferPhones();
  }catch(error){say('pcTransferMsg','Device registration: '+error.message)}
 }
 async function heartbeatTransferClient(){
  if(!transferClientId||!accountStarted)return;
- try{await api('/api/transfer-clients/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:transferClientId})});if(!phoneClient)await loadTransferPhones()}catch{}
+ try{await api('/api/transfer-clients/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:transferClientId})});if(!phoneClient&&document.body.dataset.page==='transfer')await loadTransferPhones()}catch{}
 }
 async function loadTransferPhones(){
  try{const data=await api('/api/transfer-clients');transferPhones=data.phones||[];renderPcDeviceChoices();return transferPhones}catch(error){transferPhones=[];renderPcDeviceChoices();return []}
@@ -1805,7 +1828,7 @@ function renderCurrentSessions(devices){
 }
 async function loadDevices(){
  try{
-  const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;await loadTransferPhones();renderPcDeviceChoices();
+  const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;renderPcDeviceChoices();if(document.body.dataset.page==='session')renderCurrentSessions(items);
   say('deviceCount',items.length+' paired computer'+(items.length===1?'':'s'));
   $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Background connector has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Tap Pair this computer, then enter the code on your phone and tap Connect.</div>';
   const online=items.filter(x=>x.connected).length;
@@ -2260,7 +2283,7 @@ function showPage(name){
  $('computerPage').classList.toggle('hidden',name!=='computer');
  $('sessionReviewPage').classList.toggle('hidden',name!=='session');
  if(name!=='computer'&&screenTimer){screenRunning=false;disconnectLiveScreen();$('liveScreen').textContent='Connect live screen'}
- document.body.dataset.page=name;if(name==='audio'||name==='video')renderMediaLibraries();if(name==='sync')loadSyncManifest();if(name==='security'&&isHost)loadSecurity();if(name==='setup'&&isHost)runSetupChecks();
+ document.body.dataset.page=name;if(name==='audio'||name==='video')renderMediaLibraries();if(name==='sync')loadSyncManifest();if(name==='security'&&isHost)loadSecurity();if(name==='setup'&&isHost)runSetupChecks();if(name==='transfer'&&accountStarted){loadTransferHistory();if(phoneClient)loadDevices();else loadTransferPhones()}
  document.querySelectorAll('[data-page-link]').forEach(a=>{
   if(a.dataset.pageLink===name)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');
  });

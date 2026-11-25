@@ -53,6 +53,24 @@ test('cinematic workspace uses a full-bleed dark outer shell without light page 
  assert.match(theme,/body\[data-page="overview"\] #workspace>#dynamicWorkspace\{width:100%;max-width:none/);
 });
 
+test('low-power PCs use a lighter PhoneBridge workspace rendering mode',()=>{
+ const page=html();
+ assert.match(page,/navigator\.hardwareConcurrency\)<=4/);
+ assert.match(page,/pb-performance-mode/);
+ const style=page.slice(page.indexOf('id="pbx-performance-optimizations"'),page.indexOf('</style>',page.indexOf('id="pbx-performance-optimizations"')));
+ for(const marker of ['#dynamicWorkspace:before','.pbx-ambient','.pbx-visual-halo','.pbx-feature{opacity:1!important;transform:none!important}','backdrop-filter:none!important','animation:none!important'])assert.ok(style.includes(marker),marker+' is optimized on low-power devices');
+});
+
+test('PC workspace startup avoids duplicate transfer lookups and loads history only when opened',()=>{
+ const page=html(),start=page.indexOf('async function init(){'),end=page.indexOf('let pairingWatchTimer=',start),bootstrap=page.slice(start,end);
+ assert.match(bootstrap,/await ensureTransferClient\(\);const \[initialDevices\]=await Promise\.all\(\[loadDevices\(\),loadTransferPhones\(\)\]\)/);
+ assert.doesNotMatch(bootstrap,/await loadTransferHistory\(\)/);
+ assert.match(bootstrap,/document\.body\.dataset\.page==='transfer'\)loadTransferHistory\(\)/);
+ const heartbeat=page.slice(page.indexOf('async function heartbeatTransferClient()'),page.indexOf('async function loadTransferPhones()'));
+ assert.match(heartbeat,/document\.body\.dataset\.page==='transfer'/);
+ assert.match(page,/if\(name==='transfer'&&accountStarted\)\{loadTransferHistory\(\);if\(phoneClient\)loadDevices\(\);else loadTransferPhones\(\)\}/);
+});
+
 test('the unified light theme loads after legacy styles and covers desktop and mobile navigation',()=>{
  const page=html();const oldTheme=page.indexOf('phonebridge-redesign.css');const unifiedTheme=page.indexOf('phonebridge-unified.css');
  assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads last in the document head');
