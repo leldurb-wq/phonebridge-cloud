@@ -41,15 +41,19 @@ function chooseTarget(root,finalName,transferId){
 
 async function receiveTransfer({transfer,downloadChunk,complete,baseDir}){
   if(!transfer||! /^[0-9a-f-]{36}$/i.test(transfer.id||''))throw new Error('Invalid transfer details.');
+  const rejectMetadata=async message=>{
+    try{await complete({status:'failed',error:message})}catch{}
+    throw new Error(message);
+  };
   const size=Number(transfer.sizeBytes),chunkSize=Number(transfer.chunkSize),chunkCount=Number(transfer.chunkCount);
   if(!Number.isSafeInteger(size)||size<1||size>MAX_FILE_SIZE||chunkSize!==CHUNK_SIZE||
     chunkCount!==Math.ceil(size/chunkSize)||!Array.isArray(transfer.chunks)||transfer.chunks.length!==chunkCount)
-    throw new Error('Transfer metadata is invalid.');
+    return rejectMetadata('Transfer metadata is invalid.');
   for(let i=0;i<chunkCount;i++){
     const meta=transfer.chunks[i];
     const expected=i===chunkCount-1?size-i*chunkSize:chunkSize;
     if(meta?.index!==i||meta?.sizeBytes!==expected||! /^[a-f0-9]{64}$/i.test(meta?.sha256||''))
-      throw new Error('Transfer chunk metadata is invalid.');
+      return rejectMetadata('Transfer chunk metadata is invalid.');
   }
 
   const root=path.resolve(baseDir);
@@ -126,7 +130,11 @@ async function receiveTransfer({transfer,downloadChunk,complete,baseDir}){
           try{bytes=await downloadChunk(transfer.id,index);lastError=null;break}
           catch(error){lastError=error;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)))}
         }
-        if(lastError){lastError.retryable=true;throw lastError}
+        if(lastError){
+          if([400,404,409,413,422].includes(lastError.statusCode))throw lastError;
+          lastError.retryable=true;
+          throw lastError;
+        }
         if(!Buffer.isBuffer(bytes)||bytes.length!==expected)throw new Error('A file chunk was incomplete.');
         const actual=crypto.createHash('sha256').update(bytes).digest('hex');
         if(actual!==meta.sha256)throw new Error('A file chunk failed its integrity check.');

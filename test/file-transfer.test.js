@@ -117,3 +117,18 @@ test('receiver enforces the 2 GB transfer ceiling and fixed 8 MB chunk size',()=
   assert.equal(MAX_FILE_SIZE,2*1024*1024*1024);
   assert.equal(safeName(''),'file');
 });
+
+test('invalid transfer metadata and missing cloud chunks fail clearly instead of retrying forever',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pb-transfer-invalid-'));
+  const bytes=Buffer.from('metadata check'),transfer=makeTransfer(bytes,'invalid.bin');
+  let result;
+  try{
+    const invalid={...transfer,chunks:[{...transfer.chunks[0],sha256:'bad'}]};
+    await assert.rejects(receiveTransfer({transfer:invalid,baseDir:dir,downloadChunk:async()=>bytes,complete:async value=>{result=value}}),/metadata/);
+    assert.equal(result.status,'failed');
+    result=null;
+    await assert.rejects(receiveTransfer({transfer,baseDir:dir,downloadChunk:async()=>{throw Object.assign(new Error('chunk missing'),{statusCode:404})},complete:async value=>{result=value}}),/chunk missing/);
+    assert.equal(result.status,'failed');
+    assert.deepEqual(fs.readdirSync(dir),[]);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
