@@ -71,11 +71,13 @@ test('PC workspace startup avoids duplicate transfer lookups and loads history o
  assert.match(page,/if\(name==='transfer'&&accountStarted\)\{loadTransferHistory\(\);if\(phoneClient\)loadDevices\(\);else loadTransferPhones\(\)\}/);
 });
 
-test('the unified light theme loads after legacy styles and covers desktop and mobile navigation',()=>{
+test('the unified dark theme overrides light legacy styles on every workspace feature page',()=>{
  const page=html();const oldTheme=page.indexOf('phonebridge-redesign.css');const unifiedTheme=page.indexOf('phonebridge-unified.css');
- assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads last in the document head');
+ assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads after the legacy stylesheet');
  const css=fs.readFileSync(path.join(root,'public/phonebridge-unified.css'),'utf8');
- for(const marker of ['color-scheme:light','--page-accent:#3563e9','.nav{position:fixed','grid-template-columns:repeat(5,minmax(0,1fr))','body .mobile-tabbar a[aria-current="page"]','body #accountGate .account-auth-card input'])assert.ok(css.includes(marker),`${marker} is present in the unified theme`);
+ const darkTheme=css.lastIndexOf('/* PhoneBridge dark workspace palette');
+ assert.ok(darkTheme>css.indexOf('/* Account entry'),'dark palette is the final theme override');
+ for(const marker of ['html[data-theme="dark"] body[data-page]','color-scheme:dark!important','background:#07111f','html[data-theme="dark"] body .card','html[data-theme="dark"] body .mobile-tabbar','html[data-theme="dark"] body #previewOverlay .card'])assert.ok(css.includes(marker),`${marker} keeps the dark UI active on feature screens`);
 });
 
 test('authenticated users enter the original PhoneBridge workspace, not a separate dashboard or Agent Console',()=>{

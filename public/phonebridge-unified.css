@@ -167,3 +167,84 @@ body #accountGate .account-auth-card input:focus{border-color:#7897f2!important;
 body #accountGate .account-auth-card button[type=submit]{background:linear-gradient(135deg,#416ff0,#3157d9)!important;color:#fff!important;box-shadow:0 7px 18px rgba(49,94,232,.18)}
 body #accountGate .account-auth-link{background:transparent;color:#315ee8;border:0}
 body #accountGate .account-auth-link:hover{background:#f2f5ff;color:#2447bb}
+
+/* PhoneBridge dark workspace palette — follows the saved app theme */
+html[data-theme="dark"]{color-scheme:dark;background:#050914}
+html[data-theme="dark"] body,
+html[data-theme="dark"] body[data-page]{
+ color-scheme:dark!important;--bg:#050914;--panel:#0b192a;--panel2:#10233a;--line:#24415e;
+ --text:#eaf4ff;--muted:#9bb1c9;--blue:#38bdf8;--mint:#67d9e8;--green:#69e6c3;--red:#fb8797;--gold:#8deaff;
+ --page-bg:#07111f;--page-panel:#0c1b2d;--page-soft:#10243a;--page-line:#24415e;--page-ink:#c8eaff;
+ background:radial-gradient(ellipse at 78% -12%,#0879d333 0,transparent 38%),linear-gradient(180deg,#050914,#071426 70%,#050914)!important;
+ color:#eaf4ff!important;
+}
+html[data-theme="dark"] body:before{opacity:.14;background-image:linear-gradient(#7ddcff12 1px,transparent 1px),linear-gradient(90deg,#7ddcff12 1px,transparent 1px);background-size:58px 58px}
+html[data-theme="dark"] body .topbar{background:#07111fee!important;border-color:#24415e!important;color:#eaf4ff!important;box-shadow:0 10px 34px #0004}
+html[data-theme="dark"] body .brand strong{color:#f1f8ff!important}
+html[data-theme="dark"] body .brand small{color:#82a4c4!important}
+html[data-theme="dark"] body .top-actions .role,html[data-theme="dark"] body .a11y-btn{background:#10243a!important;border-color:#345c7c!important;color:#c7eaff!important}
+html[data-theme="dark"] body .top-actions .status{background:#0c2b28!important;border-color:#286b5b!important;color:#8af0ce!important}
+html[data-theme="dark"] body .nav{background:#081526!important;border-color:#1d3855!important;box-shadow:12px 0 38px #0005}
+html[data-theme="dark"] body .nav a{color:#a8bfd7!important}
+html[data-theme="dark"] body .nav a:hover{background:#102943!important;color:#e7f8ff!important}
+html[data-theme="dark"] body .nav a[aria-current="page"]{background:linear-gradient(100deg,#12395a,#10243c)!important;border-color:#28648c!important;color:#8fe5ff!important}
+html[data-theme="dark"] body .phonebridge-workspace>p:first-child{background:#0b1a2c!important;border-color:#24415e!important;color:#91a8c5!important}
+html[data-theme="dark"] body .card,
+html[data-theme="dark"] body .welcome-feature,
+html[data-theme="dark"] body .welcome-panel,
+html[data-theme="dark"] body .panel,
+html[data-theme="dark"] body .setup-intro,
+html[data-theme="dark"] body .setup-status-card,
+html[data-theme="dark"] body .setup-address-card,
+html[data-theme="dark"] body .setup-step-card,
+html[data-theme="dark"] body .setup-troubleshoot details{
+ background:linear-gradient(145deg,#10233a,#0b192a)!important;border-color:#24415e!important;color:#eaf4ff!important;
+ box-shadow:0 16px 44px #0005,inset 0 1px #ffffff08!important;
+}
+html[data-theme="dark"] body .card-head h2,html[data-theme="dark"] body .card h2,
+html[data-theme="dark"] body .welcome-feature b,html[data-theme="dark"] body .setup-status-card h2,
+html[data-theme="dark"] body .setup-address-card h2,html[data-theme="dark"] body .setup-section-head h2{color:#edf7ff!important}
+html[data-theme="dark"] body .sub,html[data-theme="dark"] body .card p,
+html[data-theme="dark"] body .notice,html[data-theme="dark"] body .step,
+html[data-theme="dark"] body .welcome-feature small,html[data-theme="dark"] body .welcome-copy p{color:#9bb1c9!important}
+html[data-theme="dark"] body .hero,html[data-theme="dark"] body .welcome-hero,
+html[data-theme="dark"] body .welcome-feature-heading{background:linear-gradient(145deg,#10233a,#0b192a)!important;border-color:#24415e!important;color:#edf7ff!important;box-shadow:0 18px 48px #0005!important}
+html[data-theme="dark"] body .hero h1,html[data-theme="dark"] body .welcome-copy h1,
+html[data-theme="dark"] body .welcome-feature-heading h2{color:#f1f8ff!important;-webkit-text-fill-color:#f1f8ff!important}
+html[data-theme="dark"] body .hero p,html[data-theme="dark"] body .hero-note{color:#9bb1c9!important}
+html[data-theme="dark"] body .field,html[data-theme="dark"] body textarea,
+html[data-theme="dark"] body select,html[data-theme="dark"] body input:not([type="checkbox"]):not([type="radio"]){background:#081626!important;border-color:#294965!important;color:#f0f8ff!important}
+html[data-theme="dark"] body .field::placeholder,html[data-theme="dark"] body textarea::placeholder,
+html[data-theme="dark"] body input::placeholder{color:#708ba5!important}
+html[data-theme="dark"] body .secondary{background:#142b43!important;border-color:#315674!important;color:#d8edff!important}
+html[data-theme="dark"] body .quiet{background:#10253b!important;border-color:#315674!important;color:#8cddf8!important}
+html[data-theme="dark"] body .danger{background:#48263155!important;border-color:#7e3c4a!important;color:#ff9eaa!important}
+html[data-theme="dark"] body .pill,html[data-theme="dark"] body .role{background:#102b43!important;border-color:#285575!important;color:#7ddcff!important}
+html[data-theme="dark"] body .drop{background:linear-gradient(145deg,#10243a,#0b192a)!important;border-color:#367eac!important;color:#eaf4ff!important}
+html[data-theme="dark"] body .drop b{color:#edf7ff!important}html[data-theme="dark"] body .drop p{color:#9bb1c9!important}
+html[data-theme="dark"] body .pair-code{background:linear-gradient(120deg,#102b43,#0b192a)!important;border-color:#38baff!important}
+html[data-theme="dark"] body .pair-code strong{color:#c8f7ff!important}
+html[data-theme="dark"] body .file,html[data-theme="dark"] body .queue-item,
+html[data-theme="dark"] body .empty{background:#091a2b!important;border-color:#24415e!important;color:#b8cce0!important}
+html[data-theme="dark"] body .file-name b,html[data-theme="dark"] body .empty b{color:#edf7ff!important}
+html[data-theme="dark"] body .file-name small,html[data-theme="dark"] body .muted{color:#8da7c0!important}
+html[data-theme="dark"] body .file-icon,html[data-theme="dark"] body .number{background:#10314c!important;border-color:#285878!important;color:#82dcfa!important}
+html[data-theme="dark"] body .link-row,html[data-theme="dark"] body .info-line{border-color:#24415e!important;color:#a8bfd7!important}
+html[data-theme="dark"] body .link-row a,html[data-theme="dark"] body a{color:#8deaff}
+html[data-theme="dark"] body .footer{border-color:#1d3855!important;color:#708ba5!important}
+html[data-theme="dark"] body .connection-banner,html[data-theme="dark"] body .cloud-stage-notice,
+html[data-theme="dark"] body .a11y-bar,html[data-theme="dark"] body .install-panel{background:#0b1a2c!important;border-color:#24415e!important;color:#dcecff!important}
+html[data-theme="dark"] body .mobile-tabbar{background:#081526f5!important;border-color:#24415e!important;box-shadow:0 12px 38px #0009!important}
+html[data-theme="dark"] body .mobile-tabbar a{color:#9bb1c9!important}
+html[data-theme="dark"] body .mobile-tabbar a[aria-current="page"]{background:#12395a!important;color:#8deaff!important}
+html[data-theme="dark"] body #previewOverlay{background:#020817d9!important}
+html[data-theme="dark"] body #previewOverlay .card,
+html[data-theme="dark"] body #workspace .card[style*="background:#071426"]{background:#0b192a!important;border-color:#24415e!important;color:#eaf4ff!important}
+html[data-theme="dark"] body .toast{background:#12395a!important;border-color:#28648c!important;color:#eaf7ff!important}
+@media(max-width:760px){
+ html[data-theme="dark"] body{background:#050914!important;color:#eaf4ff!important}
+ html[data-theme="dark"] body .topbar{background:#07111fee!important}
+ html[data-theme="dark"] body .card,html[data-theme="dark"] body .welcome-feature,
+ html[data-theme="dark"] body .welcome-panel,html[data-theme="dark"] body .panel{background:linear-gradient(145deg,#111a30,#0b1225)!important;border-color:#24415e!important;color:#eaf4ff!important}
+ html[data-theme="dark"] body .mobile-tabbar{background:linear-gradient(135deg,#101a31ed,#0a1024f2)!important;border-color:#829aff35!important}
+}
