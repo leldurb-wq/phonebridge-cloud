@@ -11,6 +11,7 @@ async function runReconnectLoop({ credentials:initial, claim, reEnroll, sleep, r
     }
     try {
       const result=await claim(credentials);
+      if(result?.credentials)credentials=result.credentials;
       if(result?.command)report?.('task-disabled',new Error('Computer tasks are disabled in the customer workspace.'));
       await sleep(3000);
     } catch(error) {

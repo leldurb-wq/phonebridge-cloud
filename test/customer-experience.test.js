@@ -39,7 +39,7 @@ test('the original workspace bootstrap does not call local host/session APIs',()
  const bootstrap=page.slice(start,end);
  assert.doesNotMatch(bootstrap,/fetch\(['"]\/api\/(?!devices)/);
  assert.match(bootstrap,/PhoneBridge account/);assert.match(page,/No local computer API was called/);
- assert.ok(page.includes("api('/api/enrollments'"));assert.match(page,/id="beginPair"/);assert.match(page,/Cloud online/);
+ assert.ok(page.includes("http://127.0.0.1:32145/pairing/start"));assert.ok(page.includes("/api/enrollments/approve"));assert.match(page,/id="beginPair"/);assert.match(page,/Cloud online/);
 });
 
 test('unavailable legacy API names cannot fall through to the customer SPA',()=>{
@@ -115,22 +115,22 @@ test('cloud customer API disables tasks while preserving authenticated device he
  assert.doesNotMatch(worker,/commands\/claim|commands\/.*\/result|workspace-tasks|function execute|allowedActions|safePath/);
 });
 
-test('phone-generated pairing is account-bound, short-lived, single-use and redeemed by the Windows Agent',()=>{
+test('computer-initiated pairing requires approval from the signed-in phone before enrollment',()=>{
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
- const phone=server.slice(server.indexOf("app.post('/api/enrollments'"),server.indexOf('// Phone-generated pairing'));
+ const approval=server.slice(server.indexOf("app.post('/api/enrollments/approve'"),server.indexOf("app.post('/api/agent/enrollment-status'"));
+ const status=server.slice(server.indexOf("app.post('/api/agent/enrollment-status'"),server.indexOf("// Task execution"));
  const redeem=server.slice(server.indexOf("app.post('/api/agent/enroll'"),server.indexOf("app.use('/api'"));
- assert.match(phone,/requireOwner\(req,res\)/);assert.match(phone,/user_id:user\.id/);assert.match(phone,/Date\.now\(\) \+ 5 \* 60 \* 1000/);assert.match(phone,/hashEnrollmentCode\(code,serviceKey\)/);
- assert.match(redeem,/rateLimit\(5,10\*60\*1000\)/);assert.match(redeem,/hashEnrollmentCode\(code,serviceKey\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)/);assert.match(redeem,/\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);
- assert.match(redeem,/requestedDeviceName/);assert.match(redeem,/\.eq\('id',previousDeviceId\)\.eq\('user_id',ticket\.user_id\)/);
+ assert.match(approval,/requireOwner\(req,res\)/);assert.match(approval,/approved_at:now/);assert.match(approval,/eq\('user_id',user.id\)/);assert.match(approval,/hashEnrollmentCode\(code,serviceKey\)/);
+ assert.match(status,/status:ticket.approved_at\?'approved':'waiting'/);
+ assert.match(redeem,/if \(!ticket.approved_at\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)/);
  const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
- assert.match(worker,/readline\.createInterface/);assert.match(worker,/Enter the six-digit code shown in PhoneBridge on your phone/);assert.match(worker,/postJson\('\/api\/agent\/enroll'/);assert.match(worker,/enrollmentCode:code/);assert.match(worker,/process\.argv\.includes\('--pair'\)/);
- assert.doesNotMatch(worker,/notepad\.exe|pairing-requests/);assert.doesNotMatch(server,/device_pairing_requests|phonebridge_complete_pairing_request|enrollments\/approve/);
+ assert.match(worker,/createLocalPairingBridge/);assert.match(worker,/enrollment-status/);assert.match(worker,/postJson\('\/api\/agent\/enroll'/);const local=fs.readFileSync(path.join(root,'agent/local-pairing-bridge.js'),'utf8');assert.match(local,/pairing\/start/);assert.match(local,/127\.0\.0\.1/);
+ assert.doesNotMatch(worker,/readline|process\.argv\.includes|Enter the six-digit code shown in PhoneBridge on your phone/);
 });
-
-test('main PhoneBridge pairing generates the code on the phone and verifies the computer heartbeat',()=>{
- const page=html();assert.match(page,/id="pairingCodeDisplay"/);assert.match(page,/Generate pairing code/);assert.match(page,/api\('\/api\/enrollments'/);
- assert.match(page,/Enter this code in the PhoneBridge Agent window on your computer/);assert.match(page,/fresh Agent heartbeat confirms the connection/);
- assert.doesNotMatch(page,/computerPin|enrollments\/approve|temporary six-digit code in Notepad/);
+test('PhoneBridge pairing generates the code on the computer and asks the phone to approve it',()=>{
+ const page=html();assert.match(page,/id="pairingCodeDisplay"/);assert.match(page,/Pair this computer/);assert.match(page,/http:\/\/127\.0\.0\.1:32145\/pairing\/start/);
+ assert.match(page,/id="phonePairCode"/);assert.match(page,/id="approvePair"/);assert.ok(page.includes("/api/enrollments/approve"));
+ assert.match(page,/fresh secure check-in/);const pairing=page.slice(page.indexOf('id="phonePanel"'),page.indexOf('id="workspace"'));assert.doesNotMatch(pairing,/phone-generated code|Agent window/);
 });
 
 function readZipEntries(zipPath){
@@ -143,20 +143,20 @@ function readZipEntries(zipPath){
 
 test('downloadable Windows Agent archive contains its launcher and every current worker dependency',()=>{
  const archive=readZipEntries(path.join(root,'public/downloads/PhoneBridge-Agent-Windows.zip'));
- for(const name of ['README.txt','Start-PhoneBridge-Agent.cmd','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js'])assert.ok(archive.has(name),'ZIP includes '+name);
+ for(const name of ['README.txt','Start-PhoneBridge.cmd','Start-PhoneBridge-Background.vbs','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js'])assert.ok(archive.has(name),'ZIP includes '+name);
  assert.equal(archive.has('workspace-tasks.js'),false,'ZIP does not include remote task support');
- for(const name of ['cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js'])assert.deepEqual(archive.get(name),fs.readFileSync(path.join(root,'agent',name)),name+' in the download matches the reviewed agent source');
- assert.match(archive.get('Start-PhoneBridge-Agent.cmd').toString('utf8'),/node "%~dp0cloud-worker\.js"/);
+ for(const name of ['cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js'])assert.deepEqual(archive.get(name),fs.readFileSync(path.join(root,'agent',name)),name+' in the download matches the reviewed agent source');
+ assert.match(archive.get('Start-PhoneBridge.cmd').toString('utf8'),/Start-PhoneBridge-Background\.vbs/);
 });
 
 test('pairing and command relay use reviewed migrations in order and service-role-only RPC grants',()=>{
  const dir=path.join(root,'supabase/migrations');const files=fs.readdirSync(dir).filter(name=>name.endsWith('.sql')).sort();
- assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql']);
- const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');
+ assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql']);
+ const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');
  assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);
  assert.match(relay,/create table if not exists public\.device_agents/);assert.match(relay,/create table if not exists public\.device_enrollments/);assert.match(relay,/create table if not exists public\.device_commands/);assert.match(relay,/revoke all on public\.device_agents from anon, authenticated/);assert.match(relay,/device commands owner read/);
- assert.match(rpc,/create or replace function public\.phonebridge_claim_device_command/);assert.match(rpc,/create or replace function public\.phonebridge_complete_device_command/);assert.match(rpc,/grant execute on function public\.phonebridge_claim_device_command\(uuid, text\) to service_role/);assert.match(rpc,/grant execute on function public\.phonebridge_complete_device_command\([\s\S]*?to service_role/);
- const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');assert.match(readme,/002_device_command_relay\.sql/);assert.match(readme,/003_device_relay_functions\.sql/);assert.match(readme,/phone-generated pairing codes are stored in/i);assert.match(readme,/Render does not (run migrations automatically|apply database migrations)/);
+ assert.match(rpc,/create or replace function public\.phonebridge_claim_device_command/);assert.match(rpc,/create or replace function public\.phonebridge_complete_device_command/);assert.match(rpc,/grant execute on function public\.phonebridge_claim_device_command\(uuid, text\) to service_role/);assert.match(rpc,/grant execute on function public\.phonebridge_complete_device_command\([\s\S]*?to service_role/);assert.match(pairing,/add column if not exists approved_at timestamptz/);
+ const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');assert.match(readme,/002_device_command_relay\.sql/);assert.match(readme,/003_device_relay_functions\.sql/);assert.match(readme,/computer-generated pairing code/i);assert.match(readme,/Render does not (run migrations automatically|apply database migrations)/);
 });
 
 

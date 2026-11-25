@@ -873,21 +873,21 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
     <div class="setup-check"><span class="setup-check-icon">03</span><div><b>Storage capacity</b><small id="setupStorageDetail">Storage usage has not been checked.</small></div><span class="setup-state" id="setupStorage">Waiting</span></div>
     <div class="setup-check"><span class="setup-check-icon">04</span><div><b>Paired devices</b><small id="setupDevicesDetail">Device access has not been checked.</small></div><span class="setup-state" id="setupDevices">Waiting</span></div>
    </div><div class="actions"><button class="btn primary" id="runSetupChecks" type="button">Run system checks</button><span class="message" id="setupCheckMessage" role="status"></span></div></section>
-   <aside class="card setup-address-card"><span class="setup-kicker">CLOUD CONNECTION</span><h2>Connect another device</h2><p class="sub">This workspace is hosted in the cloud. PhoneBridge is hosted in the cloud; generate a code on your phone, then enter it in the Windows Agent window.</p><a class="setup-address" id="setupLanAddress" href="#" target="_blank" rel="noopener">Loading secure address…</a><button class="btn secondary" id="copySetupAddress" type="button">Copy Wi-Fi address</button><div class="setup-address-note"><span class="setup-lock">✓</span><span>Private HTTPS connection<br><b>Your account controls access to paired devices</b></span></div></aside>
+   <aside class="card setup-address-card"><span class="setup-kicker">CLOUD CONNECTION</span><h2>Connect another device</h2><p class="sub">This workspace is hosted in the cloud. PhoneBridge is hosted in the cloud; generate a code on your computer, then approve it on your phone.</p><a class="setup-address" id="setupLanAddress" href="#" target="_blank" rel="noopener">Loading secure address…</a><button class="btn secondary" id="copySetupAddress" type="button">Copy Wi-Fi address</button><div class="setup-address-note"><span class="setup-lock">✓</span><span>Private HTTPS connection<br><b>Your account controls access to paired devices</b></span></div></aside>
   </div>
   <div class="setup-section-head"><div><span class="setup-kicker">THE QUICK START</span><h2>Up and running in four steps</h2></div><p>Designed to be simple, even if this is your first time.</p></div>
   <div class="setup-steps">
-   <article class="setup-step-card"><span class="setup-step-no">01</span><div class="setup-step-icon">?</div><h3>Start PhoneBridge on your computer</h3><p>Open the Windows Agent window and leave it running. It will wait for the code from your phone.</p></article>
+   <article class="setup-step-card"><span class="setup-step-no">01</span><div class="setup-step-icon">?</div><h3>Start PhoneBridge on your computer</h3><p>Start the PhoneBridge background connector on your computer. Then tap Pair this computer in the browser.</p></article>
    <article class="setup-step-card"><span class="setup-step-no">02</span><div class="setup-step-icon">?</div><h3>Open PhoneBridge on your phone</h3><p>Visit the cloud website and sign in. No local network or certificate setup is required.</p></article>
-   <article class="setup-step-card"><span class="setup-step-no">03</span><div class="setup-step-icon">?</div><h3>Generate a phone code</h3><p>Tap Generate pairing code on your phone, then type it into the Windows Agent window.</p><a class="text-action" href="#pairing" data-page-link="pairing">View pairing instructions ?</a></article>
+   <article class="setup-step-card"><span class="setup-step-no">03</span><div class="setup-step-icon">?</div><h3>Generate a computer code</h3><p>Tap Pair this computer on the computer, then enter its code on your phone and tap Connect.</p><a class="text-action" href="#pairing" data-page-link="pairing">View pairing instructions ?</a></article>
    <article class="setup-step-card"><span class="setup-step-no">04</span><div class="setup-step-icon">?</div><h3>Check connection status</h3><p>Your computer appears in the workspace after it completes enrollment. PhoneBridge reports online and offline status.</p><small class="setup-footnote">Codes expire after five minutes and can be used once.</small></article>
   </div>
   <div class="setup-section-head"><div><span class="setup-kicker">IF SOMETHING ISN’T WORKING</span><h2>Quick troubleshooting</h2></div><p>Start with the symptom. These checks won’t change your files or settings.</p></div>
   <div class="setup-troubleshoot">
-   <details><summary>My phone cannot open the ThinkPad address</summary><p>Check that both devices have internet access and that the Windows Agent window is open. PhoneBridge pairs through the cloud, so the phone and computer do not need to be on the same Wi-Fi or Tailscale network.</p></details>
+   <details><summary>My phone cannot open the ThinkPad address</summary><p>Check that both devices have internet access and that the PhoneBridge background connector is running on the computer. PhoneBridge pairs through the cloud, so the phone and computer do not need to be on the same Wi-Fi or Tailscale network.</p></details>
    <details><summary>The browser says the connection is not private</summary><p>The cloud website uses HTTPS and does not require a local certificate. If the browser reports a certificate warning, check the website address and device date/time; do not bypass the warning.</p></details>
-   <details><summary>My pairing code expired or was not found</summary><p>Generate a fresh code on your phone, then enter it in the Windows Agent window. Codes expire after five minutes.</p></details>
-   <details><summary>My phone was connected but now shows reconnecting</summary><p>The green Cloud online label only confirms the website is reachable. Check Paired devices: the computer is connected only when it shows Online from a recent Agent heartbeat. If it is Offline, reopen the Windows Agent and use P to pair again.</p></details>
+   <details><summary>My pairing code expired or was not found</summary><p>Start a new pairing on your computer, then approve its new code on your phone. Codes expire after five minutes.</p></details>
+   <details><summary>My phone was connected but now shows reconnecting</summary><p>The green Cloud online label only confirms the website is reachable. Check Paired devices: the computer is connected only when it shows Online from a recent computer check-in. If it is Offline, restart the PhoneBridge background connector, then tap Pair this computer.</p></details>
    <details><summary>Storage is full or an upload fails</summary><p>Phone Bridge allows up to 250 MB per file and 10 GB total storage. Check the File Library before removing anything; delete only files you no longer need.</p></details>
   </div>
   <div class="setup-bottom-note"><div class="setup-bottom-logo">PB</div><div><b>Built around your privacy.</b><p>Your files stay on your ThinkPad. Phone Bridge is designed to connect your own devices—not publish your data to the open internet.</p></div><a href="#help" data-page-link="help">Read privacy & safety →</a></div>
@@ -900,23 +900,30 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
  <div class="maincol">
   <section class="card" id="phonePanel" aria-labelledby="phoneTitle">
    <div class="card-head"><h2 id="phoneTitle">Pair a computer</h2><span class="pill">Secure pairing</span></div>
-   <p class="sub">Tap below to generate a six-digit code on your phone. Enter that code in the PhoneBridge window on your computer.</p>
-   <button class="btn primary" id="beginPair" type="button">Generate pairing code</button>
+   <p class="sub">Start pairing on the computer. Then approve its six-digit code here on your phone.</p>
+   <div id="computerPairControls">
+    <button class="btn primary" id="beginPair" type="button">Pair this computer</button>
+    <p class="sub"><a href="/downloads/PhoneBridge-Agent-Windows.zip">Download the Windows background connector</a> if it is not installed yet.</p>
+    <div id="phoneCodeBox" class="hidden" aria-live="polite"><p class="sub" id="pairState">This code expires in five minutes.</p><div class="pair-code" style="margin:14px 0"><strong id="pairingCodeDisplay" style="font-size:36px;letter-spacing:.22em"></strong></div></div>
+   </div>
+   <div id="phonePairControls" class="hidden">
+    <label for="phonePairCode" class="sub">Six-digit code from your computer</label>
+    <input class="field" id="phonePairCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" aria-label="Six-digit computer pairing code">
+    <button class="btn primary" id="approvePair" type="button">Connect</button>
+   </div>
    <div class="message" id="phoneMsg" role="status" aria-live="polite"></div>
-   <div id="phoneCodeBox" class="hidden" aria-live="polite"><p class="sub" id="pairState">Your code expires in five minutes.</p><div class="pair-code" style="margin:14px 0"><strong id="pairingCodeDisplay" style="font-size:36px;letter-spacing:.22em"></strong></div><div class="actions"><button class="btn secondary" id="copyPairingCode" type="button">Copy code</button></div></div>
-
   </section>
   <section class="card" id="pairHelp">
-   <div class="card-head"><h2>How pairing works</h2><span class="pill">Phone generates code</span></div>
+   <div class="card-head"><h2>How pairing works</h2><span class="pill">Computer generates code</span></div>
    <div class="steps">
-    <div class="step"><span class="number">1</span><span><b style="color:var(--text)">Start on your phone.</b><br>Tap Generate pairing code. PhoneBridge creates a secure six-digit code.</span></div>
-    <div class="step"><span class="number">2</span><span><b style="color:var(--text)">Enter it on your computer.</b><br>Type the phone's code into the PhoneBridge Agent window on Windows.</span></div>
-    <div class="step"><span class="number">3</span><span><b style="color:var(--text)">Wait for Online.</b><br>Your computer appears in Paired devices only after its Agent checks in successfully.</span></div>
+    <div class="step"><span class="number">1</span><span><b style="color:var(--text)">On your computer.</b><br>Open PhoneBridge and tap Pair this computer. A six-digit code appears and expires in five minutes.</span></div>
+    <div class="step"><span class="number">2</span><span><b style="color:var(--text)">On your phone.</b><br>Enter the code in PhoneBridge and tap Connect to approve the computer.</span></div>
+    <div class="step"><span class="number">3</span><span><b style="color:var(--text)">Connected.</b><br>The computer connects automatically. Its status changes to Online after a fresh secure check-in.</span></div>
    </div>
   </section>
  </div>
  <aside class="sidecol">
-  <section class="card"><div class="card-head"><h2>Connection checklist</h2><span class="pill">Quick setup</span></div><div class="steps"><div class="step"><span class="number">✓</span><span>Your phone and computer have an internet connection.</span></div><div class="step"><span class="number">✓</span><span>PhoneBridge is running on the computer.</span></div><div class="step"><span class="number">✓</span><span>Enter the phone-generated code in the Windows Agent window.</span></div></div></section>
+  <section class="card"><div class="card-head"><h2>Connection checklist</h2><span class="pill">Quick setup</span></div><div class="steps"><div class="step"><span class="number">✓</span><span>Your phone and computer have an internet connection.</span></div><div class="step"><span class="number">✓</span><span>PhoneBridge is running on the computer.</span></div><div class="step"><span class="number">✓</span><span>Enter the computer-generated code on your phone and tap Connect.</span></div></div></section>
   <section class="card"><div class="card-head"><h2>PhoneBridge sections</h2><span class="pill">Availability</span></div><div class="link-list"><div class="link-row"><span>File transfer - unavailable in cloud</span><a href="#transfer">Details</a></div><div class="link-row"><span>Drive - unavailable in cloud</span><a href="#library">Details</a></div><div class="link-row"><span>Workspace - unavailable in cloud</span><a href="#notes">Details</a></div><div class="link-row"><span>Help and privacy</span><a href="#help">Read</a></div></div></section>
  </aside>
 </div>
@@ -940,7 +947,7 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
   </div>
   <aside class="sidecol">
    <section class="card" id="notes"><div class="card-head"><h2>Phone Bridge Workspace</h2><span class="pill">Notes & history</span></div><p class="sub">Keep separate notes for ideas, plans and reminders. Changes save automatically, and previous versions can be restored.</p><div class="actions"><button class="btn primary" id="newNote" type="button">＋ New note</button><button class="btn secondary" id="refreshNotes" type="button">Refresh notes</button></div><div class="layout notes-grid" style="grid-template-columns:minmax(180px,.7fr) minmax(0,1.8fr);margin-top:14px"><div><div class="filelist" id="notesList"><div class="empty">Loading your notes…</div></div></div><div><input class="field" id="noteTitle" maxlength="100" placeholder="Note title" aria-label="Note title"><textarea class="note-area" id="note" maxlength="50000" placeholder="Start writing…" style="margin-top:10px"></textarea><div class="toolbar"><span class="muted" id="noteCount" style="font-size:10px">0 / 50,000</span><span class="muted" style="font-size:10px" id="noteUpdated">Not saved yet</span></div><div class="actions"><button class="btn primary" id="saveNote" type="button">Save now</button><button class="btn secondary" id="noteHistory" type="button">Version history</button><button class="btn quiet" id="copyNote" type="button">Copy text</button><button class="btn danger" id="deleteNote" type="button">Delete note</button></div><div class="message" id="noteMsg" role="status"></div><div class="filelist hidden" id="noteHistoryList"></div></div></div></section>
-   <section class="card" id="help"><div class="card-head"><h2>Help & privacy</h2><span class="pill">Cloud workspace</span></div><div class="steps"><div class="step"><span class="number">1</span><span>Sign in with your PhoneBridge account. Your account session is stored by Supabase; local desktop session exchange is not used.</span></div><div class="step"><span class="number">2</span><span>On your phone, generate a six-digit code. Enter it in the Windows Agent window on your computer. Codes expire after five minutes and are single-use.</span></div><div class="step"><span class="number">3</span><span>Open a paired computer to see its online status and last check-in. The background connector is used only for enrollment and connection status.</span></div></div><p class="notice" style="margin:14px 0 0">The legacy Drive, browser file transfer, synchronization, notes, AI pages and audio/video streaming still depend on local-only services and are not active in the cloud app. Computer tasks, task history, screen viewing, mouse control and keyboard control are not available in this workspace. Cloud APIs enforce account ownership; service-role credentials remain server-side.</p></section>
+   <section class="card" id="help"><div class="card-head"><h2>Help & privacy</h2><span class="pill">Cloud workspace</span></div><div class="steps"><div class="step"><span class="number">1</span><span>Sign in with your PhoneBridge account. Your account session is stored by Supabase; local desktop session exchange is not used.</span></div><div class="step"><span class="number">2</span><span>On your computer, tap Pair to generate a six-digit code. Enter it on your phone and tap Connect. Codes expire after five minutes and are single-use.</span></div><div class="step"><span class="number">3</span><span>Open a paired computer to see its online status and last check-in. The background connector is used only for enrollment and connection status.</span></div></div><p class="notice" style="margin:14px 0 0">The legacy Drive, browser file transfer, synchronization, notes, AI pages and audio/video streaming still depend on local-only services and are not active in the cloud app. Computer tasks, task history, screen viewing, mouse control and keyboard control are not available in this workspace. Cloud APIs enforce account ownership; service-role credentials remain server-side.</p></section>
   </aside>
  </div>
 </section>
@@ -959,7 +966,7 @@ function hideLaunchScreen(){const e=$('launchScreen');if(e&&!e.classList.contain
 setTimeout(hideLaunchScreen,1800);
 function toast(s){say('toast',s);$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2300)}
 function headers(extra){const h=new Headers(extra||{});if(accountSession?.access_token)h.set('Authorization','Bearer '+accountSession.access_token);return h}
-async function api(url,opt={}){const method=(opt.method||'GET').toUpperCase();const pathOnly=url.split('?')[0];const safe=pathOnly==='/api/devices'&&method==='GET'||/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method)||pathOnly==='/api/enrollments'&&method==='POST';if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}if(!r.ok)throw Error(data.error||'Cloud request failed');return data}
+async function api(url,opt={}){const method=(opt.method||'GET').toUpperCase();const pathOnly=url.split('?')[0];const safe=pathOnly==='/api/devices'&&method==='GET'||/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method)||pathOnly==='/api/enrollments'&&method==='POST'||pathOnly==='/api/enrollments/approve'&&method==='POST';if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}if(!r.ok)throw Error(data.error||'Cloud request failed');return data}
 function size(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function accountMessage(message,error=false){const el=$('accountAuthMessage');if(el){el.textContent=message;el.classList.toggle('error',error)}}
@@ -993,46 +1000,70 @@ $('passwordUpdateForm').addEventListener('submit',async event=>{event.preventDef
 async function init(){
   info=null;isHost=false;
   $('workspace').classList.remove('hidden');$('pairScreen').classList.remove('hidden');
-  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');
+  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');const phoneClient=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);$('computerPairControls').classList.toggle('hidden',phoneClient);$('phonePairControls').classList.toggle('hidden',!phoneClient);
   $('deviceRole').textContent='PhoneBridge account';setBridgeStatus('Cloud online');setConnectionState('online');
   $('cloudStageNotice').hidden=false;$('setupOverall').textContent='Cloud connection';
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
-  say('setupCheckMessage','Cloud account is online. A computer is only marked connected after its Windows Agent sends a recent authenticated heartbeat.');
+  say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
   const initialDevices=await loadDevices();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);
   const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
 function stopPairingWatch(){if(pairingWatchTimer)clearInterval(pairingWatchTimer);if(pairingExpiryTimer)clearInterval(pairingExpiryTimer);pairingWatchTimer=null;pairingExpiryTimer=null}
-async function watchForPairedComputer(){
- const devices=await loadDevices();
- if(!devices)return;
- const online=devices.find(device=>device.connected&&(!pairingBaseline.has(device.id)||device.lastSeenAt!==pairingBaseline.get(device.id)));
- if(online){say('pairState',online.name+' is Online. A fresh Agent heartbeat confirms the connection.');say('phoneMsg','Pairing complete. Your computer is connected to this PhoneBridge account.');stopPairingWatch();pairingCode='';$('beginPair').disabled=false;$('beginPair').textContent='Generate another code';return}
+async function watchComputerPairing(){
+ if(!pairingCode)return;
  const remaining=Math.max(0,Math.ceil((pairingExpiresAt-Date.now())/1000));
- if(remaining<=0){stopPairingWatch();pairingCode='';say('pairState','This code expired. Generate a new one to try again.');say('phoneMsg','Pairing code expired.');$('beginPair').disabled=false;$('beginPair').textContent='Generate a new code';return}
- say('pairState','Waiting for your computer to enter the code… '+Math.floor(remaining/60)+':'+String(remaining%60).padStart(2,'0')+' remaining. The computer is not connected yet.');
+ if(remaining<=0){stopPairingWatch();pairingCode='';say('pairState','This code expired. Start a new pairing.');say('phoneMsg','Pairing code expired.');$('beginPair').disabled=false;$('beginPair').textContent='Pair this computer';return}
+ try{
+  const response=await fetch('http://127.0.0.1:32145/pairing/status',{cache:'no-store'});
+  if(!response.ok)throw Error('The local connector did not respond.');
+  const state=await response.json();
+  if(state.status==='connected'){
+   const devices=await loadDevices();
+   const online=(devices||[]).find(device=>device.connected&&(!pairingBaseline.has(device.id)||device.lastSeenAt!==pairingBaseline.get(device.id)));
+   if(online){say('pairState',online.name+' is online.');say('phoneMsg','Pairing complete. This computer is connected.');stopPairingWatch();return}
+   say('pairState','Phone approved. Finishing the secure connection…');
+  }else if(state.status==='connecting')say('pairState','Approved. Connecting this computer…');
+  else if(state.status==='expired'){stopPairingWatch();pairingCode='';say('pairState','This code expired. Start a new pairing.');$('beginPair').disabled=false;$('beginPair').textContent='Pair this computer';return}
+  else if(state.status==='error'){stopPairingWatch();say('phoneMsg',state.error||'Pairing could not finish. Try again.');$('beginPair').disabled=false;$('beginPair').textContent='Try pairing again';return}
+  else say('pairState','Waiting for approval on your phone. '+Math.floor(remaining/60)+':'+String(remaining%60).padStart(2,'0')+' remaining.');
+ }catch(error){say('pairState','Waiting for the PhoneBridge connector…');}
 }
 $('beginPair').onclick=async()=>{
  if(pairingCode)return;
- $('beginPair').disabled=true;$('beginPair').textContent='Generating…';say('phoneMsg','Creating a secure pairing code for this account…');
+ $('beginPair').disabled=true;$('beginPair').textContent='Starting…';say('phoneMsg','Contacting the secure PhoneBridge connector on this computer.');
  try{
   const before=await loadDevices();pairingBaseline=new Map((before||[]).map(device=>[device.id,device.lastSeenAt||null]));
-  const result=await api('/api/enrollments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceName:'Windows computer'})});
-  if(!result?.ok||!/^\d{6}$/.test(result.pairingCode||'')||!Number.isFinite(Date.parse(result.expiresAt||'')))throw Error('The server returned an invalid pairing code. Try again.');
+  const accessToken=await freshAccountToken();
+  const response=await fetch('http://127.0.0.1:32145/pairing/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessToken}),cache:'no-store'});
+  let result={};try{result=await response.json()}catch{}
+  if(!response.ok)throw Error(result.error||'PhoneBridge connector is not running. Start the PhoneBridge background connector and try again.');
+  if(!/^\d{6}$/.test(result.pairingCode||'')||!Number.isFinite(Date.parse(result.expiresAt||'')))throw Error('The connector returned an invalid pairing code.');
   pairingCode=result.pairingCode;pairingExpiresAt=Date.parse(result.expiresAt);
   $('pairingCodeDisplay').textContent=pairingCode;$('phoneCodeBox').classList.remove('hidden');$('beginPair').textContent='Code generated';
-  say('phoneMsg','Enter this code in the PhoneBridge Agent window on your computer.');
-  await watchForPairedComputer();pairingWatchTimer=setInterval(()=>watchForPairedComputer().catch(error=>say('phoneMsg','Checking connection… '+error.message)),4000);
-  pairingExpiryTimer=setInterval(()=>{if(pairingCode&&Date.now()>=pairingExpiresAt){stopPairingWatch();pairingCode='';say('pairState','This code expired. Generate a new one.');say('phoneMsg','Pairing code expired.');$('beginPair').disabled=false;$('beginPair').textContent='Generate a new code'}},1000);
- }catch(error){say('phoneMsg',error.message||'Could not generate a pairing code.');$('beginPair').disabled=false;$('beginPair').textContent='Generate pairing code'}
+  say('phoneMsg','Enter this code in PhoneBridge on your phone, then tap Connect.');
+  pairingWatchTimer=setInterval(()=>watchComputerPairing().catch(()=>{}),2500);
+  pairingExpiryTimer=setInterval(()=>{if(pairingCode&&Date.now()>=pairingExpiresAt)watchComputerPairing()},1000);
+  await watchComputerPairing();
+ }catch(error){say('phoneMsg',error.message||'Could not start pairing.');$('beginPair').disabled=false;$('beginPair').textContent='Pair this computer'}
 };
-$('copyPairingCode').onclick=async()=>{if(!pairingCode)return say('phoneMsg','Generate a new code first.');try{await navigator.clipboard.writeText(pairingCode);say('phoneMsg','Pairing code copied. Enter it on your computer.')}catch{say('phoneMsg','Select the six-digit code and type it on your computer.')}};
+$('approvePair').onclick=async()=>{
+ const code=$('phonePairCode').value.trim();
+ if(!/^\d{6}$/.test(code)){say('phoneMsg','Enter all six digits from the computer.');return}
+ const button=$('approvePair');button.disabled=true;button.textContent='Connecting…';
+ try{
+  await api('/api/enrollments/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  $('phonePairCode').value='';say('phoneMsg','Approved. Your computer is connecting automatically.');button.textContent='Approved';
+  const started=Date.now();const timer=setInterval(async()=>{const devices=await loadDevices();if((devices||[]).some(device=>device.connected)){clearInterval(timer);say('phoneMsg','Connected. Your computer is now Online.')}else if(Date.now()-started>30000){clearInterval(timer);say('phoneMsg','Approved. Waiting for the computer to finish connecting…')}},2500);
+ }catch(error){say('phoneMsg',error.message||'Could not approve this computer.');button.disabled=false;button.textContent='Connect'}
+};
+
 async function showWorkspace(host){
  if(!host)$('pairScreen').classList.add('hidden');$('workspace').classList.remove('hidden');if(!host)startHeartbeat();else{if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,30000);if(!hostMonitorTimer)hostMonitorTimer=setInterval(async()=>{try{await api('/api/health');setBridgeStatus('Bridge online');setConnectionState('online')}catch(e){setBridgeStatus('Reconnecting');setConnectionState('reconnecting','Bridge connection interrupted','The ThinkPad app is open but the local service is not responding. Check the server, then try again.')}},20000)}
  $('disconnect').classList.toggle('hidden',host);$('securityNav').classList.toggle('hidden',!host);$('securityPage').classList.toggle('hidden',!host);$('setupNav').classList.toggle('hidden',!host);$('connectedAs').textContent=host?'ThinkPad is hosting the shared workspace. Approved phones can transfer files and notes.':'Your phone is paired with the ThinkPad. You can send and receive files.';
  await refresh();await loadNote();if(host){await loadDevices();await loadSecurity()}
 }
-function showSessionExpired(){if(heartbeatTimer)clearTimeout(heartbeatTimer);heartbeatTimer=null;legacyToken='';$('workspace').classList.add('hidden');$('pairScreen').classList.remove('hidden');$('phonePanel').classList.remove('hidden');$('phoneCodeBox').classList.add('hidden');$('beginPair').disabled=false;setBridgeStatus('Session expired');setConnectionState('session-expired','Your session has expired','Start pairing again. A fresh code will open on your ThinkPad.');say('phoneMsg','Your session expired. Start pairing again and enter the new code from your ThinkPad.');showPage('pairing')}
+function showSessionExpired(){if(heartbeatTimer)clearTimeout(heartbeatTimer);heartbeatTimer=null;legacyToken='';$('workspace').classList.add('hidden');$('pairScreen').classList.remove('hidden');$('phonePanel').classList.remove('hidden');$('phoneCodeBox').classList.add('hidden');$('beginPair').disabled=false;setBridgeStatus('Session expired');setConnectionState('session-expired','Your session has expired','Sign in again to pair your devices.');say('phoneMsg','Your session expired. Sign in again to continue.');showPage('pairing')}
 function startHeartbeat(){if(isHost||heartbeatTimer)return;const ping=async()=>{if(heartbeatBusy||isHost)return;heartbeatBusy=true;try{const r=await fetch('/api/session/ping',{method:'POST',headers:headers(),credentials:'same-origin',cache:'no-store'});if(r.status===401){showSessionExpired();return}if(!r.ok)throw Error('Connection check failed');setBridgeStatus('Bridge online');setConnectionState('online');heartbeatDelay=20000}catch(e){setBridgeStatus(navigator.onLine?'Reconnecting':'Offline');setConnectionState(navigator.onLine?'reconnecting':'offline',navigator.onLine?'Trying to reconnect':'You are offline',navigator.onLine?'The private connection to your ThinkPad was interrupted. Phone Bridge will keep trying.':'The app is still available, but transfers and sync need the ThinkPad connection.');heartbeatDelay=Math.min(Math.round(heartbeatDelay*1.5),60000)}finally{heartbeatBusy=false}if(!isHost)heartbeatTimer=setTimeout(ping,heartbeatDelay)};ping()}
 async function retryConnection(){
  const btn=$('connectionRetry');if(!navigator.onLine){setBridgeStatus('Offline');setConnectionState('offline','You are offline','The PhoneBridge workspace remains open. Device status will refresh when your internet connection returns.');return}
@@ -1093,10 +1124,10 @@ $('audioStreamButton').onclick=()=>{if(audioRunning||systemAudioPlayer.src)stopS
  try{
   const d=await api('/api/devices'),items=d.devices||[];
   say('deviceCount',items.length+' paired computer'+(items.length===1?'':'s'));
-  $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Agent has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Generate a code on your phone, then enter it in the PhoneBridge Agent window on your computer.</div>';
+  $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Background connector has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Tap Pair this computer, then enter the code on your phone and tap Connect.</div>';
   const online=items.filter(x=>x.connected).length;
   $('connectedAs').textContent=online?online+' computer'+(online===1?' is':'s are')+' online and connected.':items.length?'Your computer is paired to this account but currently Offline. The cloud service being online does not mean the computer is connected.':'Cloud service is online. No computer has paired with this account yet.';
-  say('deviceMsg',online?'Device list updated. '+online+' computer(s) confirmed online by a recent Agent heartbeat.':'Device list updated. No computer has a recent Agent heartbeat, so none is connected yet.');return items;
+  say('deviceMsg',online?'Device list updated. '+online+' computer(s) confirmed online by a recent computer check-in.':'Device list updated. No computer has a recent computer check-in, so none is connected yet.');return items;
  }catch(e){say('deviceMsg',e.message);$('legacyDeviceList').innerHTML='<div class="empty"><b>Could not load devices</b>'+esc(e.message)+'</div>';return null}
 }
 $('legacyRefreshDevices').onclick=loadDevices;

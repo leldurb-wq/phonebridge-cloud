@@ -2,13 +2,13 @@
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const readline = require('node:readline/promises');
 const os = require('node:os');
 const path = require('node:path');
 const https = require('node:https');
 const { execFileSync } = require('node:child_process');
 const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, tokenPattern } = require('./credential-store');
 const { runReconnectLoop } = require('./reconnect-loop');
+const { createLocalPairingBridge } = require('./local-pairing-bridge');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -86,80 +86,57 @@ function postJson(urlPath, body, token) {
   });
 }
 
-async function askForPhoneCode() {
-  const terminal=readline.createInterface({input:process.stdin,output:process.stdout});
-  try {
-    while(true) {
-      const code=(await terminal.question('Enter the six-digit code shown in PhoneBridge on your phone: ')).trim();
-      if(/^\d{6}$/.test(code))return code;
-      console.log('Please enter all six digits from your phone.');
-    }
-  } finally { terminal.close(); }
+
+let nextPairingCredentials=null;
+let pairingWaiter=null;
+let activeCredentials=null;
+function publishPairingCredentials(value){
+  if(pairingWaiter){const resolve=pairingWaiter;pairingWaiter=null;resolve(value);}
+  else nextPairingCredentials=value;
 }
-async function enroll({ previous = null } = {}) {
-  if(process.platform!=='win32')throw new Error('Fresh PhoneBridge pairing is supported by the Windows Agent.');
+function waitForPairingCredentials(){
+  if(nextPairingCredentials){const value=nextPairingCredentials;nextPairingCredentials=null;return Promise.resolve(value);}
+  return new Promise(resolve=>{pairingWaiter=resolve;});
+}
+async function redeemApprovedCode(code,previous){
   const installationId=previous?.installationId||crypto.randomUUID();
-  const deviceName=os.hostname().trim().slice(0,80)||'Windows computer';
-  while(true) {
-    const code=await askForPhoneCode();
-    try {
-      const result=await postJson('/api/agent/enroll',{
-        enrollmentCode:code,
-        previousDeviceId:previous?.deviceId||null,
-        deviceName
-      });
-      if(!result?.ok||!uuidPattern.test(result.deviceId||'')||!tokenPattern.test(result.agentToken||'')||
-         typeof result.deviceName!=='string'||!result.deviceName.trim()||result.deviceName.length>80) {
-        throw new Error('PhoneBridge returned invalid device credentials.');
-      }
-      const credentials=normalizeCredentials({
-        deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,
-        installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()
-      });
-      writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
-      console.log('This computer is paired. Secure credentials have been saved for this Windows user.');
-      return credentials;
-    } catch(error) {
-      if(error.statusCode===429) {
-        console.error('Too many code attempts. Wait ten minutes, generate a fresh code on your phone, and restart this Agent.');
-        throw error;
-      }
-      if(error.statusCode===503||!error.statusCode) {
-        console.error('PhoneBridge cloud is temporarily unavailable. Check your internet connection and try the code again.');
-      } else {
-        console.error(error.message||'That code could not be used. Generate a fresh code on your phone if it has expired.');
-      }
-    }
-  }
+  const result=await postJson('/api/agent/enroll',{enrollmentCode:code,previousDeviceId:previous?.deviceId||null,deviceName:os.hostname().trim().slice(0,80)||'Windows computer'});
+  if(!result?.ok||!uuidPattern.test(result.deviceId||'')||!tokenPattern.test(result.agentToken||'')||typeof result.deviceName!=='string'||!result.deviceName.trim()||result.deviceName.length>80)throw new Error('PhoneBridge returned invalid device credentials.');
+  const value=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()});
+  writeCredentials(credentialPath,value,target=>secureCredentialPath(target,false));
+  activeCredentials=value;
+  publishPairingCredentials(value);
+  return value;
 }
 
 async function main() {
-  let credentials;
-  const forcePairing=process.argv.includes('--pair');
-  if (fs.existsSync(credentialPath)) {
-    try {
-      secureCredentialPath(credentialPath,false);
-      credentials=readCredentials(credentialPath);
-      if(credentials.cloudUrl&&credentials.cloudUrl!==parsedCloudUrl.origin)throw new Error('Saved cloud URL does not match PHONEBRIDGE_CLOUD_URL.');
-      if(forcePairing)credentials=await enroll({previous:credentials});
-      else writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
-    } catch (error) {
-      if(error.statusCode===429||error.message.includes('symbolic link')||error.message.includes('Saved cloud URL does not match'))throw error;
-      console.error('Saved agent credentials could not be read. Start a fresh pairing from the signed-in PhoneBridge app.');
-      credentials=await enroll();
-    }
-  } else credentials=await enroll();
-  console.log('PhoneBridge outbound worker is running. Cloud heartbeats will confirm when this computer is online.');
+  if(process.platform!=='win32')throw new Error('The local PhoneBridge connector runs on Windows.');
+  let credentials=null;
+  if(fs.existsSync(credentialPath)){
+    secureCredentialPath(credentialPath,false);
+    credentials=readCredentials(credentialPath);
+    activeCredentials=credentials;
+    if(credentials.cloudUrl&&credentials.cloudUrl!==parsedCloudUrl.origin)throw new Error('Saved cloud URL does not match PHONEBRIDGE_CLOUD_URL.');
+  }
+  const bridge=await createLocalPairingBridge({
+    origin:parsedCloudUrl.origin,
+    port:Number(process.env.PHONEBRIDGE_LOCAL_PORT||32145),
+    createTicket:accessToken=>postJson('/api/enrollments',{deviceName:os.hostname().trim().slice(0,80)||'Windows computer'},accessToken),
+    checkStatus:code=>postJson('/api/agent/enrollment-status',{code}),
+    onApproved:code=>redeemApprovedCode(code,activeCredentials)
+  });
+  if(!credentials)credentials=await waitForPairingCredentials();
   await runReconnectLoop({
     credentials,
-    claim:current=>postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken),
-    reEnroll:previous=>{console.error("This computer credentials were revoked or expired. Generate a new code in PhoneBridge on your phone, then enter it here.");return enroll({previous});},
+    claim:async current=>{
+      if(nextPairingCredentials){const replacement=nextPairingCredentials;nextPairingCredentials=null;return{credentials:replacement};}
+      return postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+    },
+    reEnroll:async()=>waitForPairingCredentials(),
     sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),
-    report:(kind,error)=>{
-      if(kind==='enroll-error')console.error('Re-pairing failed: '+error.message);
-      else if(kind==='network')console.error('Cloud connection unavailable; retrying automatically. ('+(error.code||error.message||'network error')+')');
-    }
+    report:()=>{}
   });
+  bridge.close();
 }
 
-main().catch(error=>{console.error(error.message);process.exit(1)});
+main().catch(()=>process.exit(1));

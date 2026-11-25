@@ -6,6 +6,8 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const crypto=require('node:crypto');
+const http=require('node:http');
+const {createLocalPairingBridge}=require('../agent/local-pairing-bridge');
 const {generatePairingCode,hashEnrollmentCode,hashLegacyPairingCode}=require('../agent/pairing-code');
 const {normalizeCredentials,readCredentials,writeCredentials}=require('../agent/credential-store');
 const {runReconnectLoop}=require('../agent/reconnect-loop');
@@ -137,4 +139,31 @@ test('failed re-enrollment does not keep retrying a known invalid token',async()
   const controller=new AbortController();let claims=0,tries=0;
   await runReconnectLoop({credentials:valid,claim:async()=>{claims++;const e=new Error('revoked');e.statusCode=401;throw e;},reEnroll:async()=>{tries++;if(tries===2)controller.abort();throw new Error('code not ready');},onCommand:async()=>{},sleep:pause,report:()=>{},signal:controller.signal});
   assert.equal(claims,1);assert.equal(tries,2);
+});
+
+test('local pairing bridge binds to loopback, accepts only the PhoneBridge origin, and waits for phone approval',async()=>{
+ let approvedCode='',ticketToken='',statusChecks=0;
+ const bridge=await createLocalPairingBridge({
+  origin:'https://phonebridge-cloud.onrender.com',port:0,
+  createTicket:async token=>{ticketToken=token;return{ok:true,pairingCode:'007321',expiresAt:new Date(Date.now()+300000).toISOString()};},
+  checkStatus:async code=>{statusChecks++;assert.equal(code,'007321');return{status:'approved'};},
+  onApproved:async code=>{approvedCode=code;}
+ });
+ const port=bridge.server.address().port;
+ const request=(url,origin,body)=>new Promise((resolve,reject)=>{
+  const payload=body===undefined?'':JSON.stringify(body);
+  const req=http.request({hostname:'127.0.0.1',port,path:url,method:body===undefined?'GET':'POST',headers:{origin,...(body===undefined?{}:{'content-type':'application/json','content-length':Buffer.byteLength(payload)})}},res=>{
+   const chunks=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>{let data={};try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{}resolve({status:res.statusCode,headers:res.headers,data});});
+  });req.on('error',reject);req.end(payload);
+ });
+ try{
+  assert.equal(bridge.server.address().address,'127.0.0.1');
+  const denied=await request('/pairing/start','https://untrusted.example',{accessToken:'a-valid-account-access-token'});
+  assert.equal(denied.status,403);
+  const started=await request('/pairing/start','https://phonebridge-cloud.onrender.com',{accessToken:'a-valid-account-access-token'});
+  assert.equal(started.status,201);assert.equal(started.data.pairingCode,'007321');assert.equal(ticketToken,'a-valid-account-access-token');
+  assert.equal(started.headers['access-control-allow-origin'],'https://phonebridge-cloud.onrender.com');
+  for(let i=0;i<20&&bridge.getStatus().status!=='connected';i++)await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(bridge.getStatus().status,'connected');assert.equal(approvedCode,'007321');assert.ok(statusChecks>=1);
+ }finally{bridge.close();}
 });

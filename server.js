@@ -38,7 +38,7 @@ app.use(helmet({
       scriptSrc:["'self'","'unsafe-inline'",'https://esm.sh'],
       styleSrc:["'self'","'unsafe-inline'"],
       imgSrc:["'self'",'data:','blob:','https:'],
-      connectSrc:["'self'",'https://*.supabase.co','wss://*.supabase.co'],
+      connectSrc:["'self'",'http://127.0.0.1:32145','https://*.supabase.co','wss://*.supabase.co'],
       frameAncestors:["'none'"],
       baseUri:["'self'"],
       formAction:["'self'"]
@@ -197,8 +197,39 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   }
 });
 
-// Phone-generated pairing uses the account-bound device_enrollments table. The phone
-// creates the one-time code; the Windows Agent redeems it after the user types it in.
+// The computer connector creates a short-lived ticket. The signed-in phone approves it.
+app.post('/api/enrollments/approve', rateLimit(8,10*60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res); if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Pairing service is not configured.'});
+  const code=typeof req.body?.code==='string'?req.body.code.trim():'';
+  if(!/^\d{6}$/.test(code))return res.status(400).json({ok:false,error:'Enter the six-digit code shown on your computer.'});
+  try{
+    const codeHash=hashEnrollmentCode(code,serviceKey);
+    const {data:ticket,error}=await supabaseAdmin.from('device_enrollments').select('id').eq('user_id',user.id).eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
+    if(error)throw error;
+    if(!ticket)return res.status(404).json({ok:false,error:'That code is invalid or has expired.'});
+    const now=new Date().toISOString();
+    const {data:approved,error:approveError}=await supabaseAdmin.from('device_enrollments').update({approved_at:now}).eq('id',ticket.id).eq('user_id',user.id).is('approved_at',null).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
+    if(approveError)throw approveError;
+    if(!approved)return res.status(409).json({ok:false,error:'This code was already approved or expired.'});
+    return res.json({ok:true,approved:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not approve this computer. Try again.'});}
+});
+
+// The background connector polls this endpoint until the phone approves its ticket.
+app.post('/api/agent/enrollment-status', rateLimit(180,10*60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Pairing service is not configured.'});
+  const code=typeof req.body?.code==='string'?req.body.code:'';
+  if(!/^\d{6}$/.test(code))return res.status(400).json({ok:false,error:'Invalid pairing request.'});
+  try{
+    const {data:ticket,error}=await supabaseAdmin.from('device_enrollments').select('approved_at,expires_at,consumed_at').eq('code_hash',hashEnrollmentCode(code,serviceKey)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
+    if(error)throw error;
+    if(!ticket)return res.json({ok:true,status:'expired'});
+    return res.json({ok:true,status:ticket.approved_at?'approved':'waiting'});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not check pairing approval.'});}
+});
 
 // Task execution is intentionally disabled in the customer workspace.
 app.post('/api/commands', rateLimit(30,10*60*1000), (req,res)=>{
@@ -251,12 +282,13 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
   if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
   if(requestedDeviceName.length>80)return res.status(400).json({ok:false,error:'Computer name must be 80 characters or fewer.'});
   try {
-    let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
+    let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
     if(findError)throw findError;
     // Accept six-digit codes issued by the immediately previous release while a
     // rolling deployment is in progress; all newly issued codes use keyed HMAC.
-    if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
+    if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
     if (!ticket) return res.status(401).json({ ok:false, error:'Invalid or expired pairing code.' });
+    if (!ticket.approved_at) return res.status(403).json({ok:false,error:'Open PhoneBridge on your phone and approve this computer first.'});
     const deviceName=requestedDeviceName||ticket.device_name;
     const now = new Date().toISOString();
     const { data:claimed, error:claimError } = await supabaseAdmin.from('device_enrollments').update({ consumed_at:now }).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
