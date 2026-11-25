@@ -15,6 +15,6 @@ The connector runs locally on 127.0.0.1 and makes outbound HTTPS connections to 
 
 The local browser connection accepts requests only from the official PhoneBridge website. Pairing codes are short-lived and single-use. The phone must be signed in to the same account that owns the computer.
 
-The connector maintains secure enrollment and quietly checks for authorized file transfers. It writes only completed, integrity-checked transfers to Documents\PhoneBridge\Incoming. Files are delivered in 8 MB chunks, up to 2 GB per file. It does not expose a terminal, launch apps, or execute arbitrary remote tasks. Screen streaming and media streaming are not available in this cloud release.
+The connector maintains secure enrollment and quietly checks for authorized file transfers. It writes only completed, integrity-checked transfers to Documents\PhoneBridge\Incoming. Files are delivered in 8 MB chunks, up to 2 GB per file. Temporary network interruptions are retried; verified chunks and completed files are checked again before resuming, so retries do not create duplicate files. A private diagnostic log is written to AppData\Local\PhoneBridge\Agent\connector.log. It does not expose a terminal, launch apps, or execute arbitrary remote tasks. Screen streaming and media streaming are not available in this cloud release.
 
 Existing device credentials remain in the current Windows user profile under AppData\Local\PhoneBridge\Agent.

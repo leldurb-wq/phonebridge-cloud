@@ -348,10 +348,10 @@ app.get('/api/transfers/:transferId',rateLimit(120,60*1000),async(req,res)=>{
   const user=await requireOwner(req,res);if(!user)return;
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
   try{
-    const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,size_bytes,status,error_message,created_at,completed_at').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
+    const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,size_bytes,status,error_message,created_at,updated_at,completed_at').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
     if(error)throw error;
     if(!data)return res.status(404).json({ok:false,error:'Transfer not found.'});
-    return res.json({ok:true,transfer:{id:data.id,name:data.file_name,size:Number(data.size_bytes),status:data.status,error:data.error_message,createdAt:data.created_at,completedAt:data.completed_at}});
+    return res.json({ok:true,transfer:{id:data.id,name:data.file_name,size:Number(data.size_bytes),status:data.status,error:data.error_message,createdAt:data.created_at,updatedAt:data.updated_at,completedAt:data.completed_at}});
   }catch(_){return res.status(503).json({ok:false,error:'Could not check transfer status.'});}
 });
 
@@ -374,13 +374,13 @@ app.post('/api/agent/transfers/claim',rateLimit(300,60*1000),rateLimit(60,60*100
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
   const agent=await requireAgent(req,res,String(req.body?.deviceId||''));if(!agent)return;
   try{
-    const staleBefore=new Date(Date.now()-10*60*1000).toISOString();
+    const staleBefore=new Date(Date.now()-2*60*1000).toISOString();
     const {error:staleError}=await supabaseAdmin.from('phone_transfers').update({status:'queued',updated_at:new Date().toISOString()}).eq('device_id',agent.deviceId).eq('status','receiving').lt('updated_at',staleBefore);
     if(staleError)throw staleError;
     const {data:rows,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,mime_type,size_bytes,chunk_size,chunk_count').eq('device_id',agent.deviceId).eq('status','queued').order('created_at',{ascending:true}).limit(1);
     if(error)throw error;
     const transfer=rows?.[0];if(!transfer)return res.json({ok:true,transfer:null});
-    const {data:claimed,error:claimError}=await supabaseAdmin.from('phone_transfers').update({status:'receiving',updated_at:new Date().toISOString()}).eq('id',transfer.id).eq('device_id',agent.deviceId).eq('status','queued').select('id,file_name,mime_type,size_bytes,chunk_size,chunk_count').maybeSingle();
+    const {data:claimed,error:claimError}=await supabaseAdmin.from('phone_transfers').update({status:'receiving',updated_at:new Date().toISOString(),error_message:null}).eq('id',transfer.id).eq('device_id',agent.deviceId).eq('status','queued').select('id,file_name,mime_type,size_bytes,chunk_size,chunk_count').maybeSingle();
     if(claimError)throw claimError;
     if(!claimed)return res.json({ok:true,transfer:null});
     const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,size_bytes,sha256').eq('transfer_id',transfer.id).order('chunk_index',{ascending:true});
@@ -416,13 +416,19 @@ app.post('/api/agent/transfers/:transferId/complete',rateLimit(60,10*60*1000),as
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
   const agent=await requireAgent(req,res,String(req.body?.deviceId||''));if(!agent)return;
   const status=req.body?.status;
-  if(!['completed','failed'].includes(status))return res.status(400).json({ok:false,error:'Invalid transfer result.'});
+  if(!['completed','failed','queued'].includes(status))return res.status(400).json({ok:false,error:'Invalid transfer result.'});
   try{
-    const changes={status,updated_at:new Date().toISOString(),error_message:status==='failed'?String(req.body?.error||'Transfer failed').slice(0,240):null,...(status==='completed'?{completed_at:new Date().toISOString()}: {})};
+    const now=new Date().toISOString();
+    const changes={status,updated_at:now,error_message:status==='completed'?null:String(req.body?.error||(status==='failed'?'Transfer failed':'Transfer will retry')).slice(0,240),...(status==='completed'?{completed_at:now}: {})};
     const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('status','receiving').select('id').maybeSingle();
     if(error)throw error;
-    if(!data)return res.status(404).json({ok:false,error:'Transfer not found or already finished.'});
-    if(['completed','failed'].includes(status)){
+    if(!data){
+      const {data:existing,error:existingError}=await supabaseAdmin.from('phone_transfers').select('status').eq('id',req.params.transferId).eq('device_id',agent.deviceId).maybeSingle();
+      if(existingError)throw existingError;
+      if(existing?.status===status)return res.json({ok:true,status,idempotent:true});
+      return res.status(404).json({ok:false,error:'Transfer not found or already finished.'});
+    }
+    if(status==='completed'||status==='failed'){
       const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',req.params.transferId);
       const paths=(chunks||[]).map(c=>c.object_path);
       if(paths.length)await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).remove(paths);

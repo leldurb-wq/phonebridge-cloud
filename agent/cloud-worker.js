@@ -23,8 +23,18 @@ if (!parsedCloudUrl || parsedCloudUrl.protocol!=='https:' || !parsedCloudUrl.hos
 const credentialDir = process.env.PHONEBRIDGE_AGENT_CONFIG_DIR ||
   path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), '.phonebridge'), 'PhoneBridge', 'Agent');
 const credentialPath = path.join(credentialDir, 'cloud-device.json');
+const logPath = path.join(credentialDir, 'connector.log');
 fs.mkdirSync(credentialDir,{recursive:true});
 if (fs.lstatSync(credentialDir).isSymbolicLink()) throw new Error('Agent credential directory must not be a symbolic link.');
+function reportAgentEvent(event,error){
+  try{
+    if(fs.existsSync(logPath)&&fs.statSync(logPath).size>512*1024){
+      try{fs.renameSync(logPath,logPath+'.1')}catch{}
+    }
+    const detail=String(error?.message||error||'').slice(0,300);
+    fs.appendFileSync(logPath,new Date().toISOString()+' '+String(event).slice(0,40)+(detail?': '+detail:'')+String.fromCharCode(10),{mode:0o600});
+  }catch{}
+}
 const MAX_CLOUD_RESPONSE_BYTES = 1024 * 1024;
 
 function secureCredentialPath(target, isDirectory) {
@@ -153,24 +163,26 @@ async function main() {
       const pending=await postJson('/api/agent/transfers/claim',{deviceId:current.deviceId},current.agentToken);
       if(pending?.transfer){
         const transfer=pending.transfer;
-        await receiveTransfer({
+        const received=await receiveTransfer({
           transfer,
           baseDir:path.join(os.homedir(),'Documents','PhoneBridge','Incoming'),
           downloadChunk:async(id,index)=>{
+            await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
             const bytes=await getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
             await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
             return bytes;
           },
           complete:result=>postJson('/api/agent/transfers/'+encodeURIComponent(transfer.id)+'/complete',{deviceId:current.deviceId,...result},current.agentToken)
         });
+        reportAgentEvent(received.retrying?'transfer-retry':'transfer-saved',new Error(transfer.fileName+(received.retrying?' is queued to resume':' saved in the PhoneBridge Incoming folder')));
       }
       return {ok:true};
     },
     reEnroll:async()=>waitForPairingCredentials(),
     sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),
-    report:()=>{}
+    report:reportAgentEvent
   });
   bridge.close();
 }
 
-main().catch(()=>process.exit(1));
+main().catch(error=>{reportAgentEvent('fatal',error);process.exit(1)});

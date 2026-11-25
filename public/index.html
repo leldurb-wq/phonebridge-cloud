@@ -1304,7 +1304,7 @@ async function sendFilesToPc(fileList){
  const tooLarge=files.find(file=>file.size>2*1024*1024*1024);
  if(tooLarge){say('pcTransferMsg',tooLarge.name+' is larger than the 2 GB limit.');return}
  const total=files.reduce((sum,file)=>sum+file.size,0),started=Date.now();
- let sent=0,complete=0;const failed=[];
+ let sent=0,complete=0;const failed=[],pending=[];
  $('pcTransferProgress').classList.remove('hidden');$('pcTransferBar').style.width='0%';
  $('pcTransferQueue').innerHTML=files.map((file,index)=>'<div class="queue-item" id="pc-transfer-'+index+'"><span>'+esc(file.name)+'</span><span>Waiting · '+size(file.size)+'</span></div>').join('');
  const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Uploading '+complete+'/'+files.length+' files · '+pct+'% · '+size(rate)+'/s · '+eta+'s remaining')};
@@ -1327,25 +1327,31 @@ async function sendFilesToPc(fileList){
     sent+=chunk.size;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update();
    }
    try{await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(error){const state=await api('/api/transfers/'+transferId);if(!['queued','receiving'].includes(state.transfer.status))throw error}
-   row.lastElementChild.textContent='Waiting for ThinkPad…';
-   let finalStatus='queued';
-   for(let check=0;check<180;check++){
+   row.lastElementChild.textContent='Uploaded to secure relay · waiting for ThinkPad receipt…';
+   say('pcTransferMsg','Phone upload complete. Waiting for the ThinkPad to verify and save '+file.name+'.');
+   let finalStatus='queued',lastActivity='';
+   for(let check=0;check<450;check++){
     await pause(4000);
-    const status=await api('/api/transfers/'+transferId);
-    finalStatus=status.transfer.status;
+    const status=await api('/api/transfers/'+transferId),item=status.transfer;
+    finalStatus=item.status;
     if(finalStatus==='completed')break;
-    if(finalStatus==='failed')throw Error(status.transfer.error||'The ThinkPad could not save this file.');
+    if(finalStatus==='failed')throw Error(item.error||'The ThinkPad could not save this file.');
+    const activity=item.updatedAt?new Date(item.updatedAt).getTime():0;
+    const stalled=activity&&Date.now()-activity>120000;
+    if(finalStatus==='receiving')row.lastElementChild.textContent=stalled?'ThinkPad connection interrupted · retrying…':'ThinkPad receiving and verifying…';
+    else row.lastElementChild.textContent=stalled?'Waiting for ThinkPad · retrying delivery…':'Uploaded · queued for ThinkPad';
+    if(item.error&&item.error!==lastActivity){lastActivity=item.error;say('pcTransferMsg',item.error)}
    }
-   if(finalStatus==='completed')row.lastElementChild.textContent='Saved on ThinkPad · '+size(file.size);
-   else row.lastElementChild.textContent='Uploaded · waiting for ThinkPad to reconnect';
+   if(finalStatus==='completed')row.lastElementChild.textContent='Saved and verified on ThinkPad · '+size(file.size);
+   else {row.lastElementChild.textContent=finalStatus==='receiving'?'ThinkPad is still receiving · check Incoming folder':'Uploaded securely · waiting for ThinkPad to reconnect';pending.push(file.name+' ('+finalStatus+')')}
    complete++;update();
   }catch(error){
    if(transferId){try{const state=await api('/api/transfers/'+transferId);if(state.transfer.status==='uploading')await api('/api/transfers/'+transferId,{method:'DELETE'})}catch{}}
    failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message;complete++;update();
   }
  }
- say('pcTransferMsg',failed.length?(files.length-failed.length)+' finished · '+failed.join(' · '):'All '+files.length+' file(s) sent to '+device.name+'.');
- toast(failed.length?'Some PC transfers need attention':'Files sent to ThinkPad');
+ say('pcTransferMsg',failed.length?(files.length-failed.length)+' uploaded · '+failed.join(' · '):pending.length?pending.length+' file(s) uploaded securely but still awaiting ThinkPad confirmation: '+pending.join(', '):'All '+files.length+' file(s) delivered and verified on '+device.name+'.');
+ toast(failed.length?'Some PC transfers need attention':pending.length?'Files uploaded · delivery pending':'Files delivered to ThinkPad');
 }
 $('pcFileInput').addEventListener('change',event=>{sendFilesToPc(event.target.files).catch(error=>say('pcTransferMsg',error.message));event.target.value=''});
 const pcDrop=$('pcDrop');
