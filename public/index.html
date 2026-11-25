@@ -1264,6 +1264,9 @@ body[data-page="overview"] #workspace>#dynamicWorkspace{display:block!important}
 @media(max-width:850px){.pbw-hero{grid-template-columns:1fr;gap:0;padding:42px 0 28px}.pbw-art{min-height:210px}.pbw-core{width:145px;height:145px}.pbw-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){#dynamicWorkspace{padding:19px 15px;border-radius:20px;min-height:calc(100vh - 90px)}.pbw-top{align-items:flex-start}.pbw-live{font-size:8px;padding:8px}.pbw-title{font-size:clamp(42px,12vw,58px);letter-spacing:-2.8px}.pbw-desc{font-size:12px}.pbw-art{min-height:185px}.pbw-core{width:128px;height:128px}.pbw-core b{font-size:34px}.pbw-section-head{display:block}.pbw-section-head p{text-align:left;margin-top:5px}.pbw-tiles{gap:8px}.pbw-tile{min-height:118px;padding:13px}.pbw-footer{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){#dynamicWorkspace:before,.pbw-live i,.pbw-core:before,.pbw-core:after,.pbw-orbit{animation:none!important}}
+/* The dashboard and feature-screen navigation have been retired from the user experience. Keep their legacy DOM hidden so existing initialization and account/pairing code remain safe. */
+body[data-page="welcome"] #dynamicWorkspace,body[data-page="pairing"] #dynamicWorkspace{display:none!important}
+.nav a[data-page-link="overview"],.nav a[data-page-link="setup"],.nav a[data-page-link="computer"],.nav a[data-page-link="transfer"],.nav a[data-page-link="library"],.nav a[data-page-link="audio"],.nav a[data-page-link="video"],.nav a[data-page-link="sync"],.nav a[data-page-link="notes"],.nav a[data-page-link="help"],.nav a[data-page-link="security"],.mobile-tabbar{display:none!important}
 </style>
 <section id="workspace" class="hidden">
  <section id="dynamicWorkspace" aria-label="PhoneBridge workspace home">
@@ -1947,9 +1950,9 @@ $('copyNote').onclick=async()=>{try{await navigator.clipboard.writeText($('note'
 async function loadNote(){return loadNotes()}
 
 /* Accessible page navigation: one feature view at a time */
-const pageNames=['welcome','overview','setup','pairing','computer','transfer','library','audio','video','sync','notes','help','security'];
+const pageNames=['welcome','pairing'];
 function showPage(name){
- if(!pageNames.includes(name))name='overview';
+ if(!pageNames.includes(name))name='welcome';
 
   $('setupPage').classList.toggle('hidden',name!=='setup');
 
