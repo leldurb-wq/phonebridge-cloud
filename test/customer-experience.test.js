@@ -12,8 +12,9 @@ test('cloud entrypoint presents the refreshed customer PhoneBridge navigation an
  const page=html();
  for(const label of ['Welcome','Overview','Pair a device','Computer','File transfer','Drive','Audio player','Video player','Sync','Workspace','Help & privacy','Setup','Security'])assert.match(page,new RegExp('>'+label+'(?: player)?<\/a>','i'));
  assert.match(page,/id="mainContent"/);assert.match(page,/id="accountGate"/);assert.match(page,/id="cloudStageNotice"/);
- assert.ok(page.includes("const pageNames=['welcome'"));assert.ok(page.includes("showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))"));
- assert.match(page,/welcomePairButton/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
+ assert.ok(page.includes("const pageNames=['welcome'"));assert.ok(page.includes("showPage(pageNames.includes(requested)?requested:(phoneClient?'welcome':initialDevices?.length?'overview':'welcome'))"));
+ for(const feature of ['computer','transfer','library','sync','notes','audio','video','pairing','setup','help'])assert.match(page,new RegExp('data-page-link="'+feature+'"'));
+ assert.match(page,/welcomePairButton/);assert.match(page,/feature-open/);assert.match(page,/PHONE-FIRST DASHBOARD/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
 });
 
 test('authenticated users enter the original PhoneBridge workspace, not a separate dashboard or Agent Console',()=>{

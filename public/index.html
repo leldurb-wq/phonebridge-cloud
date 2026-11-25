@@ -828,6 +828,57 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
  #phonePanel #pairingCodeDisplay{letter-spacing:.2em}
 }
 
+/* PHONE-FIRST DASHBOARD — clearer feature discovery and thumb-friendly navigation */
+.welcome-feature-heading{margin-top:12px}
+.welcome-feature{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-decoration:none;min-height:158px;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.welcome-feature:hover,.welcome-feature:focus-visible{transform:translateY(-3px);border-color:#48c8f5;box-shadow:0 12px 28px #168bc02b;text-decoration:none}
+.welcome-feature-icon{width:42px;height:42px;margin-bottom:12px;font-size:21px}
+.welcome-feature b{font-size:13px;line-height:1.35}
+.welcome-feature small{font-size:11px;line-height:1.5;min-height:32px}
+.feature-open{margin-top:auto;padding-top:12px;color:#7ddfff;font-size:10px;font-weight:800;letter-spacing:.2px}
+.mobile-feature-heading{display:flex}
+@media(max-width:720px){
+ .phonebridge-workspace{padding:0 13px calc(94px + env(safe-area-inset-bottom))}
+ .topbar{padding:9px 13px;min-height:60px}
+ .brand{gap:9px}.brand .logo{width:36px;height:36px}.brand strong{font-size:14px}.brand small{font-size:7px;letter-spacing:1.3px}
+ .top-actions .status{font-size:9px;padding:6px 8px}.top-actions #accountEmail{display:none}
+ .welcome-page{padding:17px 0 24px}
+ .welcome-topline{gap:8px}.welcome-secure{font-size:8px;letter-spacing:.8px}
+ .welcome-hero{display:block;min-height:0;padding:20px 0 22px}
+ .welcome-copy h1{font-size:clamp(34px,9vw,46px);line-height:1.02;letter-spacing:-2px;margin:10px 0}
+ .welcome-copy p{font-size:12px;line-height:1.65;margin:0;max-width:38ch}
+ .welcome-cta{width:100%;min-height:48px;margin-top:15px}
+ .welcome-hint{margin-top:8px;font-size:9px}
+ .welcome-visual{display:none}
+ .welcome-feature-heading{display:flex;align-items:flex-end;margin:18px 0 12px;gap:8px}
+ .welcome-feature-heading h2{font-size:20px;letter-spacing:-.5px}
+ .welcome-feature-heading p{font-size:10px;margin:0;max-width:115px;text-align:right}
+ .welcome-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .welcome-feature{min-height:145px;padding:13px;border-radius:14px}
+ .welcome-feature-icon{width:36px;height:36px;margin-bottom:9px;font-size:18px}
+ .welcome-feature b{font-size:12px}
+ .welcome-feature small{font-size:10px;line-height:1.45;min-height:29px}
+ .feature-open{font-size:9px;padding-top:8px}
+ .welcome-bottom{font-size:8px;margin-top:17px;padding-top:12px}
+ .nav{height:calc(66px + env(safe-area-inset-bottom));padding:6px 5px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;gap:2px}
+ .nav a{display:flex;flex:1 1 0;flex-direction:column;justify-content:center;gap:5px;min-width:0;min-height:52px;padding:5px 2px;border-radius:10px;font-size:9px;white-space:normal;text-align:center}
+ .nav a:before{width:6px;height:6px;margin:0}
+ .nav a[data-page-link="welcome"],.nav a[data-page-link="computer"],.nav a[data-page-link="transfer"],.nav a[data-page-link="library"],.nav a[data-page-link="notes"]{display:flex}
+ .nav a:not([data-page-link="welcome"]):not([data-page-link="computer"]):not([data-page-link="transfer"]):not([data-page-link="library"]):not([data-page-link="notes"]){display:none}
+ .phonebridge-workspace #pairScreen{margin-top:8px}
+ #phonePanel{padding:16px}
+ #phonePanel .card-head h2{font-size:16px}
+ #phonePanel .sub{font-size:11px}
+ .card{padding:16px;border-radius:15px}
+ .card-head{align-items:flex-start}
+ .card-head h2{font-size:15px}
+ .field,textarea{font-size:16px;min-height:46px}
+ .btn{min-height:46px}
+ .toolbar{flex-wrap:wrap}
+ .file{align-items:flex-start}
+ .welcome-bottom{flex-direction:column}
+}
+@media(max-width:360px){.welcome-feature-grid{gap:7px}.welcome-feature{padding:11px;min-height:140px}.welcome-feature b{font-size:11px}.welcome-feature small{font-size:9px}}
 </style>
 </head>
 <body data-page="overview"><section id="accountGate" aria-labelledby="accountGateTitle"><div class="account-auth-card"><div class="account-auth-brand"><div class="account-auth-mark">PB</div><div><b>Phone Bridge</b><small>YOUR PRIVATE ACCOUNT</small></div></div><h1 id="accountGateTitle">Welcome to Phone Bridge</h1><p id="authDescription">Sign in to open your Phone Bridge workspace.</p><form id="accountLoginForm"><label for="accountLoginEmail">Email address</label><input id="accountLoginEmail" type="email" autocomplete="username" required placeholder="you@example.com"><label for="accountLoginPassword">Password</label><input id="accountLoginPassword" type="password" autocomplete="current-password" required placeholder="Your password"><button id="accountLoginButton" type="submit">Sign in</button></form><form id="accountRegisterForm" hidden><label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" required placeholder="you@example.com"><label for="registerPassword">Password</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"><button id="registerButton" type="submit">Create account</button></form><form id="accountRecoveryForm" hidden><label for="recoveryEmail">Email address</label><input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"><button id="recoveryButton" type="submit">Send password recovery email</button></form><form id="passwordUpdateForm" hidden><label for="recoveryPassword">New password</label><input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required><button type="submit">Update password</button></form><form id="phoneAuthForm" hidden><label for="accountPhone">Phone number</label><input id="accountPhone" type="tel" autocomplete="tel" placeholder="+1 555 010 1234" required><label for="phoneOtp" id="phoneOtpLabel" hidden>Verification code</label><input id="phoneOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="SMS code" hidden><button id="phoneAuthButton" type="submit">Send sign-in code</button></form><button class="account-auth-link" id="googleAuthButton" type="button">Continue with Google</button><div id="accountAuthMessage" class="account-auth-message" role="status" aria-live="polite">Checking account service?</div><div class="account-auth-links"><button class="account-auth-link" type="button" data-auth-view="login">Sign in</button><button class="account-auth-link" type="button" data-auth-view="register">Create account</button><button class="account-auth-link" type="button" data-auth-view="recovery">Forgot password?</button><button class="account-auth-link" type="button" data-auth-view="phone">Use phone</button></div></div></section><div class="launch-screen" id="launchScreen" aria-hidden="true"><div class="launch-symbol"><svg viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="M17 51C25 17 75 17 83 51" stroke="#78DDF2" stroke-width="6" stroke-linecap="round"/><path d="M17 51V78M83 51V78M10 80H90" stroke="#4B9DFA" stroke-width="5" stroke-linecap="round"/><circle cx="17" cy="51" r="6" fill="#D9F7FF"/><circle cx="50" cy="26" r="6" fill="#D9F7FF"/><circle cx="83" cy="51" r="6" fill="#D9F7FF"/></svg></div><strong>Phone Bridge</strong><span>Your devices. Your private workspace.</span><div class="launch-progress"></div></div><a class="skip-link" href="#mainContent">Skip to main content</a><main class="shell" id="mainContent">
@@ -854,12 +905,18 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
   <div class="welcome-copy"><span class="welcome-kicker">WELCOME TO PHONEBRIDGE</span><h1 id="welcomeTitle">Your phone and computer.<br><span>Finally in sync.</span></h1><p>Connect your devices with a secure one-time code, then manage your files and your workspace from one simple place.</p><button class="btn primary welcome-cta" id="welcomePairButton" type="button">Pair a computer <span aria-hidden="true">→</span></button><small class="welcome-hint">You'll need PhoneBridge running on your computer.</small></div>
   <div class="welcome-visual" aria-hidden="true"><div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div><div class="welcome-device device-laptop"><div class="laptop-screen"><div class="device-screen-mark">PB</div><span></span><span></span><span></span></div><div class="laptop-base"></div></div><div class="welcome-device device-phone"><div class="phone-speaker"></div><div class="phone-screen"><div class="device-screen-mark">PB</div><i></i><i></i></div></div><div class="welcome-link"><span></span><span></span><span></span></div></div>
  </div>
- <div class="welcome-feature-heading"><div><span class="eyebrow">ONE CONNECTION</span><h2>Everything works together.</h2></div><p>Pair once. Open the tools you need whenever you need them.</p></div>
+ <div class="welcome-feature-heading mobile-feature-heading"><div><span class="eyebrow">YOUR PHONEBRIDGE TOOLS</span><h2>Everything, one tap away.</h2></div><p>Choose a feature to open it.</p></div>
  <div class="welcome-feature-grid">
-  <article class="welcome-feature"><span class="welcome-feature-icon">⇄</span><b>File transfer</b><small>Move files between your devices.</small></article>
-  <article class="welcome-feature"><span class="welcome-feature-icon">▣</span><b>Screen streaming</b><small>View your computer screen from your phone.</small></article>
-  <article class="welcome-feature"><span class="welcome-feature-icon">▤</span><b>Private Drive</b><small>Keep your files organised in one place.</small></article>
-  <article class="welcome-feature"><span class="welcome-feature-icon">⌁</span><b>Workspace & sync</b><small>Keep notes and selected files together.</small></article>
+  <a class="welcome-feature" href="#computer" data-page-link="computer"><span class="welcome-feature-icon">⌘</span><b>My computer</b><small>Connection status and computer tools</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#transfer" data-page-link="transfer"><span class="welcome-feature-icon">⇄</span><b>File transfer</b><small>Send and receive files</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#library" data-page-link="library"><span class="welcome-feature-icon">▤</span><b>PhoneBridge Drive</b><small>Browse and organise files</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#sync" data-page-link="sync"><span class="welcome-feature-icon">⟳</span><b>File sync</b><small>Review your sync activity</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#notes" data-page-link="notes"><span class="welcome-feature-icon">✎</span><b>Notes & workspace</b><small>Write, save and organise notes</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#audio" data-page-link="audio"><span class="welcome-feature-icon">♫</span><b>Audio player</b><small>Browse your music and audio</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#video" data-page-link="video"><span class="welcome-feature-icon">▷</span><b>Video player</b><small>Browse and play your videos</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#pairing" data-page-link="pairing"><span class="welcome-feature-icon">⌁</span><b>Pair a device</b><small>Connect another computer</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#setup" data-page-link="setup"><span class="welcome-feature-icon">⚙</span><b>Setup & diagnostics</b><small>Check your PhoneBridge setup</small><span class="feature-open">Open feature →</span></a>
+  <a class="welcome-feature" href="#help" data-page-link="help"><span class="welcome-feature-icon">?</span><b>Help & privacy</b><small>Guides, privacy and support</small><span class="feature-open">Open feature →</span></a>
  </div>
  <div class="welcome-bottom"><span>SECURE BY DESIGN</span><span>One-time pairing code · Your account · Your devices</span></div>
 </section>
@@ -1006,7 +1063,7 @@ async function init(){
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
   const initialDevices=await loadDevices();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);
-  const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))
+  const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(phoneClient?'welcome':initialDevices?.length?'overview':'welcome'))
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
 function stopPairingWatch(){if(pairingWatchTimer)clearInterval(pairingWatchTimer);if(pairingExpiryTimer)clearInterval(pairingExpiryTimer);pairingWatchTimer=null;pairingExpiryTimer=null}
