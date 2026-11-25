@@ -17,6 +17,13 @@ test('cloud entrypoint presents the refreshed customer PhoneBridge navigation an
  assert.match(page,/welcomePairButton/);assert.match(page,/feature-open/);assert.match(page,/PHONE-FIRST DASHBOARD/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
 });
 
+test('the unified light theme loads after legacy styles and covers desktop and mobile navigation',()=>{
+ const page=html();const oldTheme=page.indexOf('phonebridge-redesign.css');const unifiedTheme=page.indexOf('phonebridge-unified.css');
+ assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads last in the document head');
+ const css=fs.readFileSync(path.join(root,'public/phonebridge-unified.css'),'utf8');
+ for(const marker of ['color-scheme:light','--page-accent:#3563e9','.nav{position:fixed','grid-template-columns:repeat(5,minmax(0,1fr))','body .mobile-tabbar a[aria-current="page"]','body #accountGate .account-auth-card input'])assert.ok(css.includes(marker),`${marker} is present in the unified theme`);
+});
+
 test('authenticated users enter the original PhoneBridge workspace, not a separate dashboard or Agent Console',()=>{
  const page=html();const enter=page.slice(page.indexOf('async function enterAccountApp('),page.indexOf('async function initAccountAuth()'));
  assert.match(enter,/await init\(\)/);assert.doesNotMatch(enter,/dashboard\.js|activateCustomerDashboard/);
