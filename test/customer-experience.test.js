@@ -162,6 +162,15 @@ test('cloud file transfer routes store private owner-scoped files and enforce pe
  assert.doesNotMatch(page,/X-PB-Account-Token/);
 });
 
+test('Drive and transfer history share previews for text and common Office formats',()=>{
+ const page=html();
+ assert.match(page,/async function renderFilePreview\(name,url,stage\)/);
+ assert.match(page,/async function openFilePreview\(id\)[\s\S]*?renderFilePreview\(f\.name,url/);
+ assert.match(page,/async function openTransferFile\(id\)[\s\S]*?renderFilePreview\(item\.name,url/);
+ for(const ext of ['txt','csv','json','xml','md','rtf','docx','xlsx','xlsm','pptx'])assert.ok(page.includes("'"+ext+"'"),'preview handler recognises '+ext);
+ assert.match(page,/mammoth@1\.9\.0/);assert.match(page,/xlsx@0\.18\.5/);assert.match(page,/jszip@3\.10\.1/);
+ assert.match(page,/Preview ready · Download original is always available/);
+});
 function readZipEntries(zipPath){
  const bytes=fs.readFileSync(zipPath);const eocd=Buffer.from([0x50,0x4b,0x05,0x06]);let end=-1;
  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65558);i--)if(bytes.subarray(i,i+4).equals(eocd)){end=i;break}

@@ -1413,9 +1413,63 @@ $('legacyDeviceList').onclick=async e=>{
 let driveFiles=[],driveFolders=[''],pcPairedDevices=[];
 function previewUrl(id){return '/api/preview?id='+encodeURIComponent(id)}
 function closeFilePreview(){const box=$('previewOverlay'),stage=$('previewStage');stage.querySelectorAll('video,audio').forEach(m=>{m.pause();m.removeAttribute('src');m.load()});stage.replaceChildren();box.classList.add('hidden');document.body.classList.remove('preview-open')}
-function openFilePreview(id){const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}const kind=fileKind(f.name),url=previewUrl(id),stage=$('previewStage');$('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' · '+(f.folder||'Unfiled')+' · Stored in your private cloud Drive';$('previewDownload').href='/api/download?id='+encodeURIComponent(id);$('previewStatus').textContent='Private preview · playback depends on the file format and browser';stage.replaceChildren();let el;if(kind==='images'&&!/\.heic$/i.test(f.name)){el=document.createElement('img');el.className='preview-image';el.alt=f.name;el.src=url}else if(kind==='videos'){el=document.createElement('video');el.className='preview-video';el.controls=true;el.playsInline=true;el.preload='metadata';el.src=url}else if(kind==='audio'){el=document.createElement('audio');el.className='preview-audio';el.controls=true;el.preload='metadata';el.src=url}else if(/\.pdf$/i.test(f.name)){el=document.createElement('iframe');el.className='preview-document';el.title=f.name;el.src=url}else if(/\.(txt|csv)$/i.test(f.name)){el=document.createElement('iframe');el.className='preview-document';el.title=f.name;el.src=url}else{stage.innerHTML='<div class="empty"><b>Preview is not available for this format</b>Download the file to open it with a compatible app.</div>';$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open');return}stage.appendChild(el);$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
+function loadPreviewLibrary(src,ready){
+ if(ready())return Promise.resolve();
+ const existing=[...document.scripts].find(s=>s.src===src);
+ if(existing)return new Promise((resolve,reject)=>{existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(Error('Preview library could not be loaded.')), {once:true})});
+ return new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.async=true;script.onload=resolve;script.onerror=()=>reject(Error('Preview library could not be loaded. Check your internet connection.'));document.head.appendChild(script)});
+}
+function previewTextBlock(stage,text){
+ const pre=document.createElement('pre');pre.className='preview-document';pre.style.cssText='white-space:pre-wrap;overflow:auto;max-height:65vh;padding:18px;text-align:left;overflow-wrap:anywhere';
+ pre.textContent=text;stage.appendChild(pre);
+}
+function previewSafeHtml(stage,html){
+ const parsed=new DOMParser().parseFromString(html,'text/html'),allowed=new Set(['P','H1','H2','H3','H4','UL','OL','LI','STRONG','EM','B','I','U','BR','TABLE','THEAD','TBODY','TR','TH','TD','BLOCKQUOTE','PRE','CODE']);
+ const copy=node=>{if(node.nodeType===Node.TEXT_NODE)return document.createTextNode(node.nodeValue||'');if(node.nodeType!==Node.ELEMENT_NODE||!allowed.has(node.tagName))return document.createTextNode(node.textContent||'');const out=document.createElement(node.tagName.toLowerCase());for(const child of node.childNodes)out.appendChild(copy(child));return out};
+ const wrap=document.createElement('div');wrap.className='preview-document';wrap.style.cssText='max-height:65vh;overflow:auto;padding:18px;text-align:left';for(const child of parsed.body.childNodes)wrap.appendChild(copy(child));stage.appendChild(wrap);
+}
+function previewTable(stage,rows,title){
+ if(title){const h=document.createElement('h3');h.textContent=title;stage.appendChild(h)}
+ const table=document.createElement('table');table.className='preview-document';table.style.cssText='width:100%;border-collapse:collapse;text-align:left;font-size:12px';
+ rows.slice(0,200).forEach((row,ri)=>{const tr=document.createElement('tr');(Array.isArray(row)?row:[]).slice(0,30).forEach(value=>{const cell=document.createElement(ri===0?'th':'td');cell.textContent=value==null?'':String(value);cell.style.cssText='border:1px solid var(--page-line,#667);padding:7px;vertical-align:top';tr.appendChild(cell)});table.appendChild(tr)});stage.appendChild(table);
+}
+async function renderFilePreview(name,url,stage){
+ const ext=(name.split('.').pop()||'').toLowerCase(),kind=fileKind(name);stage.replaceChildren();
+ if(kind==='images'&&!['heic','heif'].includes(ext)){const img=document.createElement('img');img.className='preview-image';img.alt=name;img.src=url;img.onerror=()=>{stage.replaceChildren();previewTextBlock(stage,'This image format could not be decoded by this browser. Download the original file to open it.')} ;stage.appendChild(img);return}
+ if(kind==='videos'||kind==='audio'){const media=document.createElement(kind==='videos'?'video':'audio');media.className=kind==='videos'?'preview-video':'preview-audio';media.controls=true;media.playsInline=true;media.preload='metadata';media.src=url;media.onerror=()=>{const note=document.createElement('p');note.className='empty';note.textContent='This browser cannot play this media codec. Download the original file and open it with a media player.';stage.appendChild(note)};stage.appendChild(media);return}
+ if(ext==='pdf'){const frame=document.createElement('iframe');frame.className='preview-document';frame.title=name;frame.src=url;stage.appendChild(frame);return}
+ const response=await fetch(url,{headers:headers(),credentials:'same-origin',cache:'no-store'});if(!response.ok)throw Error('Could not load the file for preview ('+response.status+').');
+ if(['txt','csv','json','xml','md','log','rtf','html','htm','js','css','py','sql','yaml','yml','ini','cfg','ts','tsx','jsx','java','c','cpp','h','sh'].includes(ext)){
+  let value=await response.text();if(ext==='json'){try{value=JSON.stringify(JSON.parse(value),null,2)}catch{}}if(ext==='rtf')value=value.replace(/\\'[0-9a-f]{2}/gi,' ').replace(/\\[a-z]+-?\\d* ?/gi,' ').replace(/[{}]/g,'').replace(/\\\\/g,'\\');previewTextBlock(stage,value.slice(0,1000000));return;
+ }
+ if(ext==='docx'){
+  await loadPreviewLibrary('https://cdn.jsdelivr.net/npm/mammoth@1.9.0/mammoth.browser.min.js',()=>!!window.mammoth);
+  const result=await window.mammoth.convertToHtml({arrayBuffer:await response.arrayBuffer()});previewSafeHtml(stage,result.value||'<p>No readable document text was found.</p>');return;
+ }
+ if(['xlsx','xlsm','xls'].includes(ext)){
+  await loadPreviewLibrary('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',()=>!!window.XLSX);
+  const book=window.XLSX.read(await response.arrayBuffer(),{type:'array'});if(!book.SheetNames.length)throw Error('This workbook has no readable sheets.');
+  for(const sheetName of book.SheetNames.slice(0,5)){const rows=window.XLSX.utils.sheet_to_json(book.Sheets[sheetName],{header:1,raw:false,defval:'',blankrows:false});previewTable(stage,rows,sheetName)}
+  return;
+ }
+ if(ext==='pptx'){
+  await loadPreviewLibrary('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',()=>!!window.JSZip);
+  const zip=await window.JSZip.loadAsync(await response.arrayBuffer()),slides=Object.keys(zip.files).filter(p=>/^ppt\/slides\/slide\d+\.xml$/.test(p)).sort((a,b)=>Number(a.match(/slide(\d+)/)[1])-Number(b.match(/slide(\d+)/)[1]));
+  if(!slides.length)throw Error('No readable slides were found in this PowerPoint file.');
+  for(let i=0;i<slides.length;i++){const xml=await zip.file(slides[i]).async('string'),parts=[...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(m=>m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'"));const h=document.createElement('h3');h.textContent='Slide '+(i+1);stage.appendChild(h);previewTextBlock(stage,parts.join('\n')||'(No slide text)')}
+  return;
+ }
+ const message=document.createElement('div');message.className='empty';message.innerHTML='<b>Preview is not available in this browser</b><p>The original file is still available. Use Download file to open it in Word, Excel, PowerPoint or another compatible app.</p>';stage.appendChild(message);
+}
+function showPreview(){ $('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
+async function openFilePreview(id){
+ const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}
+ const url=previewUrl(id);$('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' · '+(f.folder||'Unfiled')+' · Stored in your private cloud Drive';$('previewDownload').href='/api/download?id='+encodeURIComponent(id);$('previewDownload').download=f.name;$('previewStatus').textContent='Preparing preview…';showPreview();
+ try{await renderFilePreview(f.name,url,$('previewStage'));$('previewStatus').textContent='Preview ready · Download original is always available'}
+ catch(error){$('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');$('previewStatus').textContent='Preview unavailable · original file is safe to download'}
+}
 $('previewClose').onclick=closeFilePreview;$('previewOverlay').addEventListener('click',e=>{if(e.target===$('previewOverlay'))closeFilePreview()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('previewOverlay').classList.contains('hidden'))closeFilePreview()});
-function fileKind(name){const e=(name.split('.').pop()||'').toLowerCase();if(['jpg','jpeg','png','gif','webp','heic'].includes(e))return'images';if(['mp4','mov','m4v','avi','mkv','webm'].includes(e))return'videos';if(['mp3','m4a','wav','aac','flac','ogg'].includes(e))return'audio';if(['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','rtf','csv'].includes(e))return'documents';return'other'}
+function fileKind(name){const e=(name.split('.').pop()||'').toLowerCase();if(['jpg','jpeg','png','gif','webp','heic','heif','bmp','tif','tiff'].includes(e))return'images';if(['mp4','mov','m4v','avi','mkv','webm','3gp','mpeg','mpg'].includes(e))return'videos';if(['mp3','m4a','wav','aac','flac','ogg','opus'].includes(e))return'audio';if(['pdf','doc','docx','xls','xlsx','xlsm','ppt','pptx','txt','rtf','csv','odt','ods','odp'].includes(e))return'documents';return'other'}
 function renderDrive(){const q=$('driveSearch').value.trim().toLowerCase(),folder=$('driveFolder').value,filter=$('driveFilter').value,sort=$('driveSort').value;let a=driveFiles.filter(f=>(!q||f.name.toLowerCase().includes(q))&&(folder==='*'||(folder===''?!f.folder:f.folder===folder))&&(filter==='all'||(filter==='favorites'?f.favorite:fileKind(f.name)===filter)));a.sort((x,y)=>sort==='oldest'?x.modified-y.modified:sort==='name'?x.name.localeCompare(y.name,undefined,{sensitivity:'base'}):sort==='largest'?y.size-x.size:y.modified-x.modified);say('fileCount',a.length+' of '+driveFiles.length+' files');$('files').innerHTML=a.length?a.map(f=>'<div class="file"><input type="checkbox" data-select="'+encodeURIComponent(f.id)+'" aria-label="Select '+esc(f.name)+'" style="width:18px;height:18px;flex:none"><div class="file-icon">'+({images:'IMG',videos:'VID',audio:'AUD',documents:'DOC',other:'FILE'}[fileKind(f.name)])+'</div><div class="file-name"><b title="'+esc(f.name)+'">'+esc(f.name)+(f.favorite?' [STAR]':'')+'</b><small>'+size(f.size)+' | '+esc(f.folder||'Unfiled')+' | '+new Date(f.modified).toLocaleString()+'</small></div><div class="file-actions"><button data-preview="'+encodeURIComponent(f.id)+'">Preview</button><button data-fav="'+encodeURIComponent(f.id)+'">'+(f.favorite?'Starred':'Star')+'</button><button data-move="'+encodeURIComponent(f.id)+'">Move</button><button data-dl="'+encodeURIComponent(f.id)+'">Download</button><button class="del" data-del="'+encodeURIComponent(f.id)+'">Delete</button></div></div>').join(''):'<div class="empty"><b>No matching files</b>Try another search or folder, or upload a file to Drive.</div>'}
 
 let audioQueue=[],videoQueue=[],audioIndex=-1,videoIndex=-1,audioFilter='all',videoFilter='all';
@@ -1661,15 +1715,14 @@ async function openTransferFile(id){
  try{
   let url=transferObjectUrls.get(id);
   if(!url){say('pcTransferMsg','Loading '+item.name+' for preview…');const blob=await fetchTransferBlob(item,item.direction==='pc_to_phone'?item.targetClientId:'');url=URL.createObjectURL(blob);transferObjectUrls.set(id,url)}
-  const stage=$('previewStage'),kind=fileKind(item.name);stage.replaceChildren();$('previewTitle').textContent=item.name;$('previewMeta').textContent=size(item.size)+' · Transfer copy retained for 24 hours';$('previewStatus').textContent='Opened from PhoneBridge transfer history';$('previewDownload').href=url;$('previewDownload').download=item.name;
-  let element;
-  if(kind==='images'&&!/\.heic$/i.test(item.name)){element=document.createElement('img');element.className='preview-image';element.alt=item.name;element.src=url}
-  else if(kind==='videos'){element=document.createElement('video');element.className='preview-video';element.controls=true;element.playsInline=true;element.src=url}
-  else if(kind==='audio'){element=document.createElement('audio');element.className='preview-audio';element.controls=true;element.src=url}
-  else if(/\.pdf$/i.test(item.name)){element=document.createElement('iframe');element.className='preview-document';element.title=item.name;element.src=url}
-  else{element=document.createElement('div');element.className='empty';element.textContent='Preview is not available for this file type. Use Download file.'}
-  stage.appendChild(element);$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open');
- }catch(error){say('pcTransferMsg','Could not open '+item.name+': '+error.message)}
+  $('previewTitle').textContent=item.name;$('previewMeta').textContent=size(item.size)+' · Transfer copy retained for 24 hours';$('previewStatus').textContent='Preparing preview…';$('previewDownload').href=url;$('previewDownload').download=item.name;showPreview();
+  await renderFilePreview(item.name,url,$('previewStage'));
+  $('previewStatus').textContent='Preview ready · Download original is always available';
+ }catch(error){
+  $('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');
+  $('previewTitle').textContent=item.name;$('previewMeta').textContent=size(item.size)+' · Transfer copy retained for 24 hours';$('previewDownload').download=item.name;$('previewStatus').textContent='Preview unavailable · original file is safe to download';showPreview();
+  say('pcTransferMsg','Could not preview '+item.name+': '+error.message);
+ }
 }
 $('transferHistory').addEventListener('click',event=>{const button=event.target.closest('[data-transfer-open]');if(button)openTransferFile(button.dataset.transferOpen)});
 $('refreshTransferHistory').onclick=loadTransferHistory;
