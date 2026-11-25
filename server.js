@@ -197,54 +197,8 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   }
 });
 
-// New pairing starts on the computer. The Agent receives a short-lived code,
-// then the signed-in phone approves that code and binds it to its account.
-app.post('/api/agent/pairing-requests', rateLimit(4,10*60*1000), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
-  const deviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
-  const installationId=typeof req.body?.installationId==='string'?req.body.installationId:'';
-  const previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:null;
-  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if(!deviceName||deviceName.length>80||!uuid.test(installationId)||
-     (previousDeviceId!==null&&!uuid.test(previousDeviceId)))return res.status(400).json({ok:false,error:'Computer pairing details are invalid.'});
-  try{
-    await supabaseAdmin.from('device_pairing_requests').delete().lt('expires_at',new Date().toISOString());
-    const expiresAt=new Date(Date.now()+5*60*1000).toISOString();
-    const pollToken=crypto.randomBytes(32).toString('base64url');
-    const pollTokenHash=crypto.createHash('sha256').update(pollToken).digest('hex');
-    for(let attempt=0;attempt<5;attempt++){
-      const code=generatePairingCode();
-      const codeHash=hashEnrollmentCode(code,serviceKey);
-      const {data,error}=await supabaseAdmin.from('device_pairing_requests').insert({
-        code_hash:codeHash,poll_token_hash:pollTokenHash,installation_id:installationId,
-        previous_device_id:previousDeviceId,device_name:deviceName,expires_at:expiresAt
-      }).select('id').single();
-      if(!error)return res.status(201).json({ok:true,requestId:data.id,code,pollToken,expiresAt,expiresInSeconds:300});
-      if(error.code!=='23505')throw error;
-    }
-    throw new Error('Could not create a unique pairing request.');
-  }catch(_){return res.status(503).json({ok:false,error:'Could not start computer pairing. Confirm migration 004 is installed.'});}
-});
-
-// Only the signed-in account can claim an unapproved computer-generated code.
-app.post('/api/enrollments/approve', rateLimit(10,10*60*1000), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  const user=await requireOwner(req,res);
-  if(!user)return;
-  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
-  const code=typeof req.body?.code==='string'?req.body.code.trim():'';
-  if(!/^\d{6}$/.test(code))return res.status(400).json({ok:false,error:'Enter the six-digit code shown on your computer.'});
-  const now=new Date().toISOString();
-  try{
-    const {data,error}=await supabaseAdmin.from('device_pairing_requests').update({user_id:user.id,approved_at:now})
-      .eq('code_hash',hashEnrollmentCode(code,serviceKey)).is('user_id',null).is('approved_at',null)
-      .is('consumed_at',null).gt('expires_at',now).select('id,device_name,expires_at').maybeSingle();
-    if(error)throw error;
-    if(!data)return res.status(409).json({ok:false,error:'That code is invalid, expired, or already approved. Check the code on the computer and try again.'});
-    return res.status(200).json({ok:true,deviceName:data.device_name,expiresAt:data.expires_at,waitingForComputer:true});
-  }catch(_){return res.status(503).json({ok:false,error:'Could not approve this computer. Confirm migration 004 is installed.'});}
-});
+// Phone-generated pairing uses the account-bound device_enrollments table. The phone
+// creates the one-time code; the Windows Agent redeems it after the user types it in.
 
 // Task execution is intentionally disabled in the customer workspace.
 app.post('/api/commands', rateLimit(30,10*60*1000), (req,res)=>{
@@ -284,34 +238,6 @@ app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLi
   return res.status(410).json({ok:false,error:'Computer task execution is not enabled in this PhoneBridge workspace.'});
 });
 
-// The computer polls with a high-entropy secret; credentials are returned once,
-// only after an authenticated account approved this exact pairing request.
-app.post('/api/agent/pairing-requests/:requestId/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
-  const requestId=req.params.requestId||'';
-  const pollToken=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)||!pollToken)return res.status(401).json({ok:false,error:'Pairing request authentication required.'});
-  const pollTokenHash=crypto.createHash('sha256').update(pollToken).digest('hex');
-  try{
-    const {data:request,error}=await supabaseAdmin.from('device_pairing_requests').select('id,expires_at,user_id,approved_at,consumed_at')
-      .eq('id',requestId).eq('poll_token_hash',pollTokenHash).maybeSingle();
-    if(error)throw error;
-    if(!request)return res.status(401).json({ok:false,error:'Pairing request authentication failed.'});
-    if(request.consumed_at)return res.status(409).json({ok:false,error:'This pairing request was already completed.'});
-    if(new Date(request.expires_at).getTime()<=Date.now())return res.status(410).json({ok:false,error:'This pairing code expired. Start pairing again on the computer.'});
-    if(!request.user_id||!request.approved_at)return res.json({ok:true,approved:false});
-    const agentToken=crypto.randomBytes(32).toString('base64url');
-    const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
-    const {data:claimed,error:claimError}=await supabaseAdmin.rpc('phonebridge_complete_pairing_request',{
-      p_request_id:requestId,p_poll_token_hash:pollTokenHash,p_agent_token_hash:tokenHash
-    });
-    if(claimError)throw claimError;
-    if(!claimed)return res.status(409).json({ok:false,error:'This pairing request is no longer available.'});
-    return res.status(200).json({ok:true,approved:true,deviceId:claimed.deviceId,deviceName:claimed.deviceName,agentToken});
-  }catch(_){return res.status(503).json({ok:false,error:'Could not complete computer pairing. Confirm migration 004 is installed.'});}
-});
-
 // Windows agent redeems a one-time pairing code for a long-lived per-device bearer token.
 app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -321,7 +247,9 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
   if (!isPairingCode && !/^[A-Za-z0-9_-]{40,50}$/.test(code)) return res.status(400).json({ ok:false, error:'Enter the six-digit pairing code shown in PhoneBridge.' });
   const codeHash = hashEnrollmentCode(code,serviceKey);
   const previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:'';
+  const requestedDeviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
   if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
+  if(requestedDeviceName.length>80)return res.status(400).json({ok:false,error:'Computer name must be 80 characters or fewer.'});
   try {
     let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
     if(findError)throw findError;
@@ -329,6 +257,7 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
     // rolling deployment is in progress; all newly issued codes use keyed HMAC.
     if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
     if (!ticket) return res.status(401).json({ ok:false, error:'Invalid or expired pairing code.' });
+    const deviceName=requestedDeviceName||ticket.device_name;
     const now = new Date().toISOString();
     const { data:claimed, error:claimError } = await supabaseAdmin.from('device_enrollments').update({ consumed_at:now }).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
     if (claimError || !claimed) return res.status(409).json({ ok:false, error:'Pairing code has already been used or expired.' });
@@ -340,7 +269,7 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
       if(lookupError)throw lookupError;
       if(existing){
         deviceId=existing.id;
-        const {error:updateDeviceError}=await supabaseAdmin.from('devices').update({name:ticket.device_name,device_type:'windows_agent'}).eq('id',deviceId).eq('user_id',ticket.user_id);
+        const {error:updateDeviceError}=await supabaseAdmin.from('devices').update({name:deviceName,device_type:'windows_agent'}).eq('id',deviceId).eq('user_id',ticket.user_id);
         if(updateDeviceError)throw updateDeviceError;
         const {data:rotated,error:rotateError}=await supabaseAdmin.from('device_agents').update({token_hash:tokenHash,enabled:true,last_seen_at:null}).eq('device_id',deviceId).select('device_id').maybeSingle();
         if(rotateError)throw rotateError;
@@ -348,13 +277,13 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
       }
     }
     if(!deviceId){
-      const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:ticket.device_name,device_type:'windows_agent'}).select('id').single();
+      const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:deviceName,device_type:'windows_agent'}).select('id').single();
       if(deviceError||!device)throw deviceError||new Error('Device record was not created.');
       deviceId=device.id;
       const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
       if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
     }
-    return res.status(201).json({ ok:true, deviceId, deviceName:ticket.device_name, agentToken });
+    return res.status(201).json({ ok:true, deviceId, deviceName, agentToken });
   } catch (_) {
     return res.status(503).json({ ok:false, error:'Device enrollment could not be completed.' });
   }
@@ -366,7 +295,7 @@ app.use('/api',(req,res)=>res.status(501).json({ok:false,error:'This API is not 
 app.use(express.static(path.join(__dirname,'public'),{
   extensions:['html'],
   maxAge:process.env.NODE_ENV==='production'?'1h':0,
-  setHeaders(res,filePath){if(path.basename(filePath)==='dashboard.js')res.setHeader('Cache-Control','no-cache')}
+  setHeaders(res,filePath){if(path.basename(filePath)==='index.html')res.setHeader('Cache-Control','no-cache, no-store, must-revalidate');if(path.basename(filePath)==='dashboard.js')res.setHeader('Cache-Control','no-cache')}
 }));
 app.get(/.*/,(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.use((err,req,res,next)=>{

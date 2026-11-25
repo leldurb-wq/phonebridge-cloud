@@ -17,7 +17,11 @@ if errorlevel 1 (
   exit /b 1
 )
 echo PhoneBridge Cloud Agent
-node "%~dp0cloud-worker.js"
+echo.
+set "PAIR_ARGS="
+set /p "PAIR_CHOICE=Press P then Enter to pair/re-pair, or just Enter to reconnect: "
+if /I "%PAIR_CHOICE%"=="P" set "PAIR_ARGS=--pair"
+node "%~dp0cloud-worker.js" %PAIR_ARGS%
 echo.
 echo Keep this window open while you want this computer connected.
 pause

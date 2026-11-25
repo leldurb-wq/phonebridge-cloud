@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check agent/cloud-worker.js && node --check agent/credential-store.js && node --check agent/pairing-code.js && node --check agent/enrollment.js && node --check agent/device-status.js && node --check agent/client-address.js && node --check agent/reconnect-loop.js",
+    "check": "node --check server.js && node --check agent/cloud-worker.js && node --check agent/windows-package/cloud-worker.js && node --check agent/credential-store.js && node --check agent/pairing-code.js && node --check agent/enrollment.js && node --check agent/device-status.js && node --check agent/client-address.js && node --check agent/reconnect-loop.js",
     "test": "npm run check && node --test",
     "agent": "node agent/cloud-worker.js"
   },

@@ -3,8 +3,8 @@
 ## Customer flow
 
 - The customer dashboard is the main signed-in experience. It keeps the original PhoneBridge branding and navigation; Agent Console and remote task tools are not exposed.
-- The Windows connector requests a short-lived six-digit code and displays it in Notepad. A signed-in phone approves the code to bind the computer to that account.
-- Pairing codes expire after five minutes and are single-use. Codes and agent poll secrets are stored as hashes. The per-device token is returned only after approval and is stored locally with Windows user-only permissions.
+- The signed-in phone generates a short-lived six-digit code. The user enters it in the Windows Agent console to bind that computer to the phone's account.
+- Pairing codes expire after five minutes and are single-use. Only a keyed hash is stored. The per-device token is returned to the Agent after redemption and is stored locally with Windows user-only permissions.
 - The background connector is retained for enrollment and heartbeat status. Existing installed credentials continue to work; old command-poll requests update status only.
 
 ## Feature boundary
@@ -15,7 +15,7 @@
 
 ## Database and release boundary
 
-- Migrations 001, 002, and 004 are required for the current account/device pairing and status flow. Migration 003 remains in the ordered migration chain for compatibility. Migration 004 adds the computer-generated pairing request and its service-role-only completion function.
-- Migration 004 is new in this checkout. Production migration history and schema have not been verified from this environment, and no migration has been applied here.
-- Render does not run migrations. Deploying the updated Agent and pairing API before migration 004 is applied will leave the new pairing route unavailable; the older code-generated enrollment endpoint remains for older Agent binaries.
+- Migrations 001, 002, and 003 remain the ordered database chain. Phone-generated pairing uses the existing `device_enrollments` table from migration 002; no migration 004 is required.
+- The Windows Agent redeems the phone-generated code through `/api/agent/enroll`; the cloud reports a computer Online only after a recent authenticated Agent heartbeat.
+- Render does not run migrations. Verify that the existing production database has migrations 001 through 003 before relying on pairing and device status.
 - Tests can verify code paths and source consistency, but they cannot prove production enrollment or ThinkPad authentication. Real pairing and status require production migration review, deployment, and live verification.
