@@ -112,7 +112,7 @@ body[data-page="transfer"] #workspace .layout .maincol>section:not(#transfer),bo
 body[data-page="library"] .hero,body[data-page="library"] #pairScreen,body[data-page="library"] #workspace>.card{display:none!important}
 body[data-page="library"] #workspace{display:block!important}
 body[data-page="library"] #workspace .layout{display:grid!important;grid-template-columns:1fr!important}
-body[data-page="library"] #workspace .layout .maincol>section:not(#library),body[data-page="library"] #workspace .layout .sidecol{display:none!important}
+body[data-page="library"] #workspace .layout .maincol>section:not(#library):not(#cloudUpload),body[data-page="library"] #workspace .layout .sidecol{display:none!important}
 body[data-page="notes"] .hero,body[data-page="notes"] #pairScreen,body[data-page="notes"] #workspace>.card{display:none!important}
 body[data-page="notes"] #workspace{display:block!important}
 body[data-page="notes"] #workspace .layout{display:grid!important;grid-template-columns:1fr!important}
@@ -1318,23 +1318,120 @@ body[data-page="overview"] #workspace>#dynamicWorkspace{display:block!important}
 body[data-page="welcome"] #dynamicWorkspace,body[data-page="pairing"] #dynamicWorkspace{display:none!important}
 .nav a[data-page-link="overview"],.nav a[data-page-link="setup"],.nav a[data-page-link="computer"],.nav a[data-page-link="transfer"],.nav a[data-page-link="library"],.nav a[data-page-link="audio"],.nav a[data-page-link="video"],.nav a[data-page-link="sync"],.nav a[data-page-link="notes"],.nav a[data-page-link="help"],.nav a[data-page-link="security"],.mobile-tabbar{display:none!important}
 </style>
+<style id="pbx-cinematic-workspace-style">
+/* PhoneBridge post-pairing workspace: full-width cinematic canvas */
+body[data-page="overview"] .phonebridge-workspace{padding:0!important;margin:0!important;min-height:calc(100svh - 78px)}
+body[data-page="overview"] #workspace{width:100%;max-width:none;margin:0;padding:0!important;border:0;background:transparent;box-shadow:none}
+body[data-page="overview"] #workspace>#dynamicWorkspace{display:flex!important;width:100%;min-height:calc(100svh - 78px);margin:0;padding:clamp(20px,3vw,48px) clamp(16px,4vw,66px) 34px;border:0;border-radius:0;box-shadow:none}
+#dynamicWorkspace{position:relative;isolation:isolate;overflow:hidden;flex-direction:column;background:radial-gradient(ellipse at 76% 13%,#173d754f 0,transparent 35%),radial-gradient(ellipse at 8% 82%,#174e6840 0,transparent 34%),linear-gradient(145deg,#050a17 0%,#08142a 47%,#050b18 100%);color:#eef7ff}
+#dynamicWorkspace:before{content:"";position:absolute;z-index:-2;inset:0;opacity:.3;background-image:linear-gradient(#65cfff0b 1px,transparent 1px),linear-gradient(90deg,#65cfff0b 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(ellipse at center,#000,transparent 90%)}
+#dynamicWorkspace:after{content:"";position:absolute;z-index:-2;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#dffaff 98%,transparent),radial-gradient(1px 1px at 79% 31%,#bcecff 98%,transparent),radial-gradient(2px 2px at 59% 78%,#fff 98%,transparent),radial-gradient(1px 1px at 91% 83%,#9beaff 98%,transparent);background-size:340px 270px;opacity:.55;animation:pbx-stars 34s linear infinite}
+.pbx-backdrop{position:absolute;z-index:-1;inset:0;overflow:hidden;pointer-events:none}
+.pbx-ambient{position:absolute;display:block;width:44vw;height:44vw;min-width:340px;min-height:340px;border-radius:50%;filter:blur(55px);opacity:.12;animation:pbx-drift 18s ease-in-out infinite alternate}
+.pbx-ambient-one{left:18%;top:12%;background:#268bff}.pbx-ambient-two{right:2%;bottom:-20%;background:#8c55ff;animation-delay:-8s}
+.pbx-container{position:relative;z-index:1;width:100%;max-width:1740px;margin:0 auto;display:flex;flex-direction:column;flex:1}
+.pbx-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid #91cfff20}
+.pbx-brand{display:flex;align-items:center;gap:12px}.pbx-brand-mark{width:42px;height:42px;display:grid;place-items:center;border:1px solid #76eaff83;border-radius:14px;background:linear-gradient(145deg,#1c5f8c,#18244d);color:#c9f8ff;font-size:15px;font-weight:950;box-shadow:0 0 28px #37caff2b,inset 0 1px #fff4}
+.pbx-brand strong{display:block;font-size:11px;font-weight:950;letter-spacing:2.7px;color:#f2f8ff}.pbx-brand small{display:block;margin-top:4px;font-size:8px;letter-spacing:1.7px;color:#7698bc}
+.pbx-header-actions{display:flex;align-items:center;gap:12px}.pbx-secure{display:inline-flex;align-items:center;gap:8px;color:#8eb8d8;font-size:8px;font-weight:850;letter-spacing:1.4px}.pbx-secure i{width:7px;height:7px;border-radius:50%;background:#61edc3;box-shadow:0 0 13px #61edc3;animation:pbx-pulse 1.8s ease-in-out infinite}
+.pbx-pair-link{display:inline-flex;align-items:center;gap:15px;min-height:40px;padding:0 14px;border:1px solid #4e8ebc66;border-radius:10px;background:#10243b;color:#d6edff;text-decoration:none;font-size:8px;font-weight:900;letter-spacing:1px;transition:.2s}.pbx-pair-link:hover{border-color:#8ceaff;color:#fff;transform:translateY(-2px)}
+.pbx-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);align-items:center;gap:clamp(20px,5vw,78px);padding:clamp(26px,4vh,54px) 0 clamp(18px,2.8vh,34px)}
+.pbx-eyebrow{display:inline-block;color:#73dfff;font-size:9px;font-weight:950;letter-spacing:2.8px}
+.pbx-hero-copy h1{margin:14px 0 15px;font-size:clamp(48px,6.4vw,88px);line-height:.93;letter-spacing:-.075em;font-weight:900;color:#f3f8ff}
+.pbx-hero-copy h1 em{font-style:normal;background:linear-gradient(95deg,#76e9ff 0%,#94aaff 52%,#c99fff 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 8px 24px #479eff2b)}
+.pbx-hero-copy>p{max-width:520px;margin:0;color:#9bb2ce;font-size:13px;line-height:1.85}
+.pbx-hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.pbx-primary,.pbx-ghost{display:inline-flex;align-items:center;justify-content:center;gap:18px;min-height:47px;padding:0 18px;border-radius:11px;text-decoration:none;font-size:9px;font-weight:950;letter-spacing:1px;transition:transform .2s,box-shadow .2s,border-color .2s}
+.pbx-primary{border:1px solid #a8f1ff;background:linear-gradient(105deg,#8eeaff,#62baf4 58%,#a99cff);color:#071425;box-shadow:0 10px 32px #3bafff35,inset 0 1px #ffffffa8}.pbx-ghost{border:1px solid #416486;background:#0a1b30;color:#c8dff3}.pbx-primary:hover,.pbx-ghost:hover{transform:translateY(-3px);box-shadow:0 16px 36px #319eff38}
+.pbx-live-stats{display:flex;align-items:center;gap:18px;margin-top:27px}.pbx-live-stats>div:not(.pbx-stat-divider){display:flex;flex-direction:column;gap:3px}.pbx-stat-value{font-size:17px;font-weight:900;letter-spacing:-.5px;color:#eaf7ff}.pbx-stat-label{font-size:7px;font-weight:850;letter-spacing:1.6px;color:#718fad}.pbx-stat-divider{height:28px;width:1px;background:#74cfff35}
+.pbx-visual{position:relative;min-height:clamp(250px,30vw,390px);display:grid;place-items:center;isolation:isolate}
+.pbx-visual-halo{position:absolute;width:58%;height:70%;border-radius:50%;background:radial-gradient(ellipse,#187ae95c,transparent 70%);filter:blur(28px);animation:pbx-halo 6s ease-in-out infinite}
+.pbx-orbit{position:absolute;left:50%;top:50%;border:1px solid #65dfff3c;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
+.pbx-orbit-a{width:77%;height:57%;transform:translate(-50%,-50%) rotate(-22deg);animation:pbx-orbit 18s linear infinite}
+.pbx-orbit-b{width:64%;height:84%;transform:translate(-50%,-50%) rotate(48deg);border-color:#ad9cff35;animation:pbx-orbit 24s linear infinite reverse}
+.pbx-orbit-c{width:94%;height:38%;transform:translate(-50%,-50%) rotate(12deg);border-style:dashed;border-color:#66cfff25;animation:pbx-orbit 32s linear infinite}
+.pbx-core{position:relative;z-index:2;width:clamp(112px,13vw,170px);aspect-ratio:1;display:grid;place-items:center;border:1px solid #b1f4ffb0;border-radius:50%;background:radial-gradient(circle at 34% 27%,#c7fbff 0,#64d8ff 8%,#2874c4 27%,#172b61 57%,#09152a 73%);box-shadow:0 0 40px #3abfff86,0 0 112px #426fff38,inset -18px -24px 36px #020714;animation:pbx-core-float 6s ease-in-out infinite}
+.pbx-core span{font-size:clamp(31px,4vw,48px);font-weight:950;letter-spacing:-5px;color:#edfcff;text-shadow:0 0 26px #b5f7ff}
+.pbx-core i{position:absolute;inset:-13px;border:1px solid #8cecff70;border-radius:50%;animation:pbx-core-ring 8s linear infinite}
+.pbx-node{position:absolute;z-index:3;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:66px;color:#bceeff;text-shadow:0 0 18px #37cfff5e;animation:pbx-node-float 5s ease-in-out infinite}
+.pbx-node b{width:42px;height:42px;display:grid;place-items:center;border:1px solid #70dfff7a;border-radius:13px;background:linear-gradient(145deg,#164a72,#101d3a);box-shadow:0 0 26px #2dbbff35;font-size:19px}
+.pbx-node small{font-size:7px;font-weight:900;letter-spacing:1.2px;color:#91b9d7}.pbx-node-phone{left:7%;top:22%}.pbx-node-pc{right:5%;top:24%;animation-delay:-1.4s}.pbx-node-cloud{left:50%;bottom:3%;transform:translateX(-50%);animation-delay:-2.7s}
+.pbx-connection-line{position:absolute;left:25%;right:25%;top:50%;height:1px;background:linear-gradient(90deg,transparent,#6deaff,#b8a2ff,#6deaff,transparent);box-shadow:0 0 22px #49dfff8c;animation:pbx-line 2.8s ease-in-out infinite}
+.pbx-feature-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 15px;padding-top:4px}.pbx-feature-heading h2{margin:6px 0 3px;font-size:clamp(22px,2.2vw,30px);letter-spacing:-1px;color:#f0f7ff}.pbx-feature-heading p{margin:0;color:#86a2bf;font-size:10px}.pbx-feature-count{padding:8px 11px;border:1px solid #4c739655;border-radius:30px;color:#91b7d5;font-size:7px;font-weight:900;letter-spacing:1.5px;white-space:nowrap}
+.pbx-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.pbx-feature{position:relative;isolation:isolate;display:flex;min-width:0;min-height:157px;flex-direction:column;justify-content:space-between;gap:14px;padding:17px 18px;border:1px solid #315170a6;border-radius:17px;background:linear-gradient(145deg,#132940dc,#0a192bdc 76%);color:#e8f5ff;text-decoration:none;overflow:hidden;box-shadow:0 14px 34px #0002,inset 0 1px #ffffff0c;transform:translateY(18px);opacity:0;animation:pbx-card-enter .7s cubic-bezier(.2,.8,.2,1) forwards;transition:transform .25s,border-color .25s,box-shadow .25s,background .25s}
+.pbx-feature:nth-child(2){animation-delay:.06s}.pbx-feature:nth-child(3){animation-delay:.12s}.pbx-feature:nth-child(4){animation-delay:.18s}.pbx-feature:nth-child(5){animation-delay:.24s}.pbx-feature:nth-child(6){animation-delay:.30s}.pbx-feature:nth-child(7){animation-delay:.36s}.pbx-feature:nth-child(8){animation-delay:.42s}.pbx-feature:nth-child(9){animation-delay:.48s}.pbx-feature:nth-child(10){animation-delay:.54s}.pbx-feature:nth-child(11){animation-delay:.60s}
+.pbx-feature:before{content:"";position:absolute;z-index:-1;inset:0;opacity:0;background:radial-gradient(circle at 95% 5%,#5ccfff32,transparent 48%);transition:opacity .25s}.pbx-feature:after{content:"";position:absolute;top:-55px;right:-55px;width:120px;height:120px;border-radius:50%;background:#4ebdff10;filter:blur(5px);transition:transform .3s}
+.pbx-feature[href]:hover{z-index:2;transform:translateY(-6px)!important;border-color:#77e7ffb5;background:linear-gradient(145deg,#193b58,#10233b);box-shadow:0 22px 50px #0005,0 0 28px #39bfff21,inset 0 1px #ffffff24}
+.pbx-feature[href]:hover:before{opacity:1}.pbx-feature[href]:hover:after{transform:scale(1.45)}
+.pbx-feature-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.pbx-feature-top>i{width:38px;height:38px;display:grid;place-items:center;border:1px solid #5a9ec277;border-radius:12px;background:linear-gradient(145deg,#164568,#10243b);color:#9cecff;font-size:19px;font-style:normal;box-shadow:0 0 22px #2caeff20}
+.pbx-status{padding:6px 8px;border:1px solid #477a7770;border-radius:30px;background:#10342f;color:#91f4d9;font-size:6px;font-weight:950;letter-spacing:1px;white-space:nowrap}.pbx-status.is-drive{border-color:#527ab777;background:#152a4b;color:#a6caff}.pbx-status.is-limited-status{border-color:#806b4e77;background:#302719;color:#d7ba8b}.pbx-status.is-host-only{border-color:#6b639877;background:#25213b;color:#bcb2ff}
+.pbx-feature strong{display:block;margin-bottom:5px;font-size:13px;font-weight:850;letter-spacing:-.2px;color:#f0f7ff}.pbx-feature small{display:block;max-width:34ch;color:#91a9c4;font-size:9px;line-height:1.65}
+.pbx-feature-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid #42607c55;color:#86cdeb;font-size:7px;font-weight:950;letter-spacing:1.3px}.pbx-feature-bottom b{font-size:15px;font-weight:500}
+.pbx-feature.is-limited{opacity:.74;cursor:not-allowed;border-style:dashed;background:linear-gradient(145deg,#111f31d9,#0a1424d9)}.pbx-feature.is-limited .pbx-feature-top>i{border-color:#495a70;background:#172237;color:#8195ad;box-shadow:none}.pbx-feature.is-limited .pbx-feature-bottom{color:#8293a8}.pbx-feature.is-limited:before{display:none}
+.pbx-footer{display:flex;justify-content:space-between;gap:12px;margin-top:auto;padding-top:17px;color:#6384a2;font-size:7px;font-weight:850;letter-spacing:1.5px}.pbx-footer span:last-child{color:#91abc4}
+@keyframes pbx-stars{to{background-position:340px 270px}}@keyframes pbx-drift{to{transform:translate(7vw,-4vh) scale(1.18);opacity:.22}}@keyframes pbx-pulse{50%{opacity:.35;box-shadow:0 0 3px #61edc3}}@keyframes pbx-halo{50%{transform:scale(1.15);opacity:.7}}@keyframes pbx-orbit{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes pbx-core-float{50%{transform:translateY(-8px)}}@keyframes pbx-core-ring{to{transform:rotate(360deg)}}@keyframes pbx-node-float{50%{translate:0 -9px}}@keyframes pbx-line{50%{opacity:.35;filter:blur(1px)}}@keyframes pbx-card-enter{to{transform:translateY(0);opacity:1}}
+@media(max-width:1120px){.pbx-feature-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.pbx-hero{grid-template-columns:minmax(0,1fr) minmax(300px,.85fr);gap:20px}.pbx-hero-copy h1{font-size:clamp(45px,6vw,70px)}}
+@media(max-width:780px){body[data-page="overview"] #workspace>#dynamicWorkspace{padding:18px 16px 26px}.pbx-header{align-items:flex-start}.pbx-header-actions{gap:7px;flex-direction:column;align-items:flex-end}.pbx-hero{grid-template-columns:1fr;padding:30px 0 22px}.pbx-hero-copy h1{font-size:clamp(47px,10vw,68px)}.pbx-visual{min-height:245px;max-width:560px;width:100%;margin:0 auto}.pbx-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pbx-feature{min-height:150px;padding:14px}.pbx-feature-count{font-size:6px}}
+@media(max-width:480px){body[data-page="overview"] #workspace>#dynamicWorkspace{padding:14px 12px 22px}.pbx-brand-mark{width:36px;height:36px}.pbx-brand strong{font-size:9px;letter-spacing:2px}.pbx-brand small{font-size:7px}.pbx-secure{font-size:6px}.pbx-pair-link{min-height:34px;padding:0 10px;font-size:7px}.pbx-hero{padding:27px 0 18px}.pbx-hero-copy h1{font-size:clamp(43px,12vw,56px)}.pbx-hero-copy>p{font-size:11px}.pbx-primary,.pbx-ghost{min-height:43px;padding:0 12px;font-size:8px}.pbx-live-stats{margin-top:20px}.pbx-visual{min-height:205px}.pbx-node b{width:35px;height:35px}.pbx-feature-heading{align-items:flex-start;flex-direction:column;gap:8px}.pbx-feature-grid{gap:8px}.pbx-feature{min-height:147px;padding:12px;border-radius:14px}.pbx-feature strong{font-size:11px}.pbx-feature small{font-size:8px}.pbx-status{font-size:5px;padding:5px 6px}.pbx-feature-bottom{font-size:6px}.pbx-footer{flex-direction:column;font-size:6px}}
+@media(prefers-reduced-motion:reduce){#dynamicWorkspace:before,#dynamicWorkspace:after,.pbx-ambient,.pbx-secure i,.pbx-visual-halo,.pbx-orbit,.pbx-core,.pbx-core i,.pbx-node,.pbx-connection-line,.pbx-feature{animation:none!important;transition:none!important;opacity:1;transform:none}}
+</style>
+<style id="pbx-workspace-flow-style">
+/* Show the cinematic home only on its own route; feature pages remain focused. */
+body[data-page]:not([data-page="overview"]) #workspace>#dynamicWorkspace{display:none!important}
+body[data-page="overview"] #workspace>#dynamicWorkspace{animation:pbx-workspace-enter .85s cubic-bezier(.2,.8,.2,1) both}
+.pbx-hero-copy{animation:pbx-workspace-rise .8s .08s both}
+.pbx-visual{animation:pbx-workspace-rise 1s .16s both}
+.pbx-feature.is-limited{animation-name:pbx-limited-card-enter}
+body[data-page="computer"] #workspace>#deviceManager{display:block!important;width:min(100%,1740px);margin:0 auto 18px}
+@keyframes pbx-workspace-enter{from{opacity:0;filter:blur(8px);transform:translateY(12px)}to{opacity:1;filter:blur(0);transform:translateY(0)}}
+@keyframes pbx-workspace-rise{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pbx-limited-card-enter{to{transform:translateY(0);opacity:.72}}
+@media(prefers-reduced-motion:reduce){body[data-page="overview"] #workspace>#dynamicWorkspace,.pbx-hero-copy,.pbx-visual,.pbx-feature.is-limited{animation:none!important;opacity:1;transform:none;filter:none}}
+</style>
 <section id="workspace" class="hidden">
- <section id="dynamicWorkspace" aria-label="PhoneBridge workspace home">
-  <div class="pbw-top"><div class="pbw-brand"><span class="pbw-mark">PB</span><span>PHONEBRIDGE <small style="display:block;margin-top:3px;color:#7594af;font-size:8px;letter-spacing:2px">YOUR CONNECTED SPACE</small></span></div><span class="pbw-live"><i></i> PRIVATE WORKSPACE</span></div>
-  <div class="pbw-hero"><div><span class="pbw-kicker">WELCOME TO YOUR DIGITAL SPACE</span><h1 class="pbw-title">Everything<br>moves <span>together.</span></h1><p class="pbw-desc">One calm place for your devices, files and ideas. Move straight to what you need—without a complicated control panel.</p><div class="pbw-actions"><a class="pbw-primary" href="#transfer" data-page-link="transfer">START TRANSFERRING <b>↗</b></a><a class="pbw-secondary" href="#library" data-page-link="library">OPEN YOUR DRIVE</a></div></div><div class="pbw-art" aria-hidden="true"><div class="pbw-orbit"></div><div class="pbw-orbit pbw-orbit-two"></div><div class="pbw-core"><b>PB</b></div></div></div>
-  <div class="pbw-section-head"><div><span class="pbw-kicker">YOUR TOOLS, ONE TAP AWAY</span><h2>Where would you like to go?</h2></div><p>Choose a destination. Your workspace stays focused and uncluttered.</p></div>
-  <nav class="pbw-tiles" aria-label="Workspace features">
-   <a class="pbw-tile" href="#transfer" data-page-link="transfer"><span class="pbw-tile-icon">↗</span><span><strong>File transfer</strong><small>Send files between devices</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#library" data-page-link="library"><span class="pbw-tile-icon">▤</span><span><strong>Private Drive</strong><small>Your files, neatly stored</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#computer" data-page-link="computer"><span class="pbw-tile-icon">▣</span><span><strong>My devices</strong><small>View connected computers</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#sync" data-page-link="sync"><span class="pbw-tile-icon">⟳</span><span><strong>Sync</strong><small>Keep selected files updated</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#audio" data-page-link="audio"><span class="pbw-tile-icon">♫</span><span><strong>Audio</strong><small>Your personal listening space</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#video" data-page-link="video"><span class="pbw-tile-icon">▷</span><span><strong>Video</strong><small>Watch your saved videos</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#notes" data-page-link="notes"><span class="pbw-tile-icon">✎</span><span><strong>Notes</strong><small>Keep ideas in one place</small></span><b class="pbw-tile-arrow">↗</b></a>
-   <a class="pbw-tile" href="#help" data-page-link="help"><span class="pbw-tile-icon">?</span><span><strong>Help & privacy</strong><small>Simple answers and controls</small></span><b class="pbw-tile-arrow">↗</b></a>
+ <section id="dynamicWorkspace" aria-label="PhoneBridge connected workspace">
+ <div class="pbx-backdrop" aria-hidden="true"><i class="pbx-starfield"></i><i class="pbx-ambient pbx-ambient-one"></i><i class="pbx-ambient pbx-ambient-two"></i></div>
+ <div class="pbx-container">
+  <header class="pbx-header">
+   <div class="pbx-brand"><span class="pbx-brand-mark">PB</span><span><strong>PHONEBRIDGE</strong><small>YOUR PRIVATE DIGITAL SPACE</small></span></div>
+   <div class="pbx-header-actions"><span class="pbx-secure"><i></i> SECURE SESSION</span><a class="pbx-pair-link" href="#pairing" data-page-link="pairing">PAIR ANOTHER DEVICE <b>↗</b></a></div>
+  </header>
+  <section class="pbx-hero">
+   <div class="pbx-hero-copy">
+    <span class="pbx-eyebrow">YOUR DEVICES. YOUR WORLD.</span>
+    <h1>Everything<br><em>in one place.</em></h1>
+    <p>Move files, manage your private Drive and bring your devices together. Your connected space starts here.</p>
+    <div class="pbx-hero-actions"><a class="pbx-primary" href="#transfer" data-page-link="transfer">START TRANSFERRING <b>↗</b></a><a class="pbx-ghost" href="#library" data-page-link="library">EXPLORE YOUR DRIVE</a></div>
+    <div class="pbx-live-stats">
+     <div><span class="pbx-stat-value" id="pbxDeviceCount">—</span><span class="pbx-stat-label">PAIRED COMPUTERS</span></div>
+     <div class="pbx-stat-divider"></div>
+     <div><span class="pbx-stat-value" id="pbxOnlineCount">Checking</span><span class="pbx-stat-label">LIVE CONNECTION</span></div>
+    </div>
+   </div>
+   <div class="pbx-visual" aria-hidden="true">
+    <div class="pbx-visual-halo"></div><div class="pbx-orbit pbx-orbit-a"></div><div class="pbx-orbit pbx-orbit-b"></div><div class="pbx-orbit pbx-orbit-c"></div>
+    <div class="pbx-core"><span>PB</span><i></i></div>
+    <div class="pbx-node pbx-node-phone"><b>▯</b><small>PHONE</small></div><div class="pbx-node pbx-node-pc"><b>▣</b><small>COMPUTER</small></div><div class="pbx-node pbx-node-cloud"><b>☁</b><small>PRIVATE DRIVE</small></div>
+    <div class="pbx-connection-line"></div>
+   </div>
+  </section>
+  <div class="pbx-feature-heading"><div><span class="pbx-eyebrow">THE PHONEBRIDGE ECOSYSTEM</span><h2>Your features</h2><p>Choose a space to get started.</p></div><span class="pbx-feature-count">11 FEATURE SPACES</span></div>
+  <nav class="pbx-feature-grid" aria-label="PhoneBridge features">
+   <a class="pbx-feature" href="#transfer" data-page-link="transfer"><span class="pbx-feature-top"><i>⇄</i><b class="pbx-status is-live">LIVE</b></span><span><strong>File transfer</strong><small>Send files between your phone and computer, with verified delivery.</small></span><span class="pbx-feature-bottom">OPEN FEATURE <b>↗</b></span></a>
+   <a class="pbx-feature" href="#library" data-page-link="library"><span class="pbx-feature-top"><i>▤</i><b class="pbx-status is-live">LIVE</b></span><span><strong>Private Drive</strong><small>Store, organize, preview and download your private files.</small></span><span class="pbx-feature-bottom">OPEN DRIVE <b>↗</b></span></a>
+   <a class="pbx-feature" href="#computer" data-page-link="computer"><span class="pbx-feature-top"><i>▣</i><b class="pbx-status is-live">LIVE</b></span><span><strong>My devices</strong><small>See paired computers and their latest secure connection status.</small></span><span class="pbx-feature-bottom">VIEW DEVICES <b>↗</b></span></a>
+   <a class="pbx-feature" href="#library" data-page-link="library"><span class="pbx-feature-top"><i>♫</i><b class="pbx-status is-drive">DRIVE PREVIEW</b></span><span><strong>Audio files</strong><small>Find audio in Drive and preview browser-compatible formats.</small></span><span class="pbx-feature-bottom">BROWSE DRIVE <b>↗</b></span></a>
+   <a class="pbx-feature" href="#library" data-page-link="library"><span class="pbx-feature-top"><i>▷</i><b class="pbx-status is-drive">DRIVE PREVIEW</b></span><span><strong>Video files</strong><small>Browse videos in Drive and preview supported formats.</small></span><span class="pbx-feature-bottom">BROWSE DRIVE <b>↗</b></span></a>
+   <a class="pbx-feature" href="#pairing" data-page-link="pairing"><span class="pbx-feature-top"><i>⌁</i><b class="pbx-status is-live">LIVE</b></span><span><strong>Secure pairing</strong><small>Connect another computer or phone using a one-time approval code.</small></span><span class="pbx-feature-bottom">PAIR DEVICE <b>↗</b></span></a>
+   <a class="pbx-feature" href="#help" data-page-link="help"><span class="pbx-feature-top"><i>◇</i><b class="pbx-status is-live">LIVE</b></span><span><strong>Help & privacy</strong><small>Understand how your account, device links and files are protected.</small></span><span class="pbx-feature-bottom">OPEN GUIDE <b>↗</b></span></a>
+   <article class="pbx-feature is-limited" aria-disabled="true"><span class="pbx-feature-top"><i>⟳</i><b class="pbx-status is-limited-status">NOT IN CLOUD</b></span><span><strong>Folder sync</strong><small>Automatic folder mirroring is not enabled in this cloud release.</small></span><span class="pbx-feature-bottom">NOT AVAILABLE <b>—</b></span></article>
+   <article class="pbx-feature is-limited" aria-disabled="true"><span class="pbx-feature-top"><i>✎</i><b class="pbx-status is-limited-status">NOT IN CLOUD</b></span><span><strong>Workspace notes</strong><small>The notes and version-history service is not enabled in this cloud release.</small></span><span class="pbx-feature-bottom">NOT AVAILABLE <b>—</b></span></article>
+   <article class="pbx-feature is-limited" aria-disabled="true"><span class="pbx-feature-top"><i>▣</i><b class="pbx-status is-limited-status">NOT IN CLOUD</b></span><span><strong>Screen access</strong><small>Live screen viewing and remote input are not available in this cloud release.</small></span><span class="pbx-feature-bottom">NOT AVAILABLE <b>—</b></span></article>
+   <article class="pbx-feature is-limited" aria-disabled="true"><span class="pbx-feature-top"><i>⌑</i><b class="pbx-status is-host-only">HOST ONLY</b></span><span><strong>Security controls</strong><small>Local host security and audit controls are not exposed in the cloud workspace.</small></span><span class="pbx-feature-bottom">HOST ACCESS ONLY <b>—</b></span></article>
   </nav>
-  <div class="pbw-footer"><span>PHONEBRIDGE · PRIVATE BY DESIGN</span><span>YOUR DEVICES. YOUR FILES. YOUR CONTROL.</span></div>
- </section>
+  <footer class="pbx-footer"><span>PHONEBRIDGE · PRIVATE BY DESIGN</span><span>YOUR DEVICES. YOUR FILES. YOUR CONTROL.</span></footer>
+ </div>
+</section>
  <section class="card hidden" id="deviceManager" style="margin:0 0 16px"><div class="card-head"><h2>Paired devices</h2><span class="pill" id="deviceCount">0 devices</span></div><p class="sub">Manage the computers paired to your PhoneBridge account. Removing a computer revokes its cloud access.</p><div class="filelist" id="legacyDeviceList"><div class="empty">Loading paired devices...</div></div><div class="actions"><button class="btn secondary" id="legacyRefreshDevices" type="button">Refresh devices</button></div><div class="message" id="deviceMsg" role="status"></div></section>
  <section class="card hidden" id="securityPage" style="margin:0 0 16px"><div class="card-head"><h2>Phone Bridge Control</h2><span class="pill">Owner-only security</span></div><p class="sub">Review access to this ThinkPad, inspect recent security activity and export a local audit report. Only the ThinkPad host can open this page.</p><div class="layout" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><div class="file"><div class="file-icon">DEV</div><div class="file-name"><small>ACTIVE SESSIONS</small><b id="securityDevices">Checking…</b></div></div><div class="file"><div class="file-icon">TLS</div><div class="file-name"><small>CONNECTION</small><b id="securityTransport">Checking…</b></div></div><div class="file"><div class="file-icon">LOG</div><div class="file-name"><small>RETAINED EVENTS</small><b id="securityEventCount">Checking…</b></div></div></div><p class="notice" style="margin-top:12px">Pairing codes expire after 5 minutes. Approved sessions expire after 12 hours. Activity records contain action types and device labels only—not file contents, note text, pairing codes or session tokens. Up to 500 recent events are retained on this ThinkPad.</p><div class="toolbar"><b>Security activity</b><select class="field" id="auditFilter" aria-label="Filter security activity" style="max-width:190px"><option value="all">All activity</option><option value="access">Device & access</option><option value="files">Files & sync</option><option value="workspace">Workspace notes</option></select></div><div class="actions"><button class="btn secondary" id="refreshAudit" type="button">Refresh activity</button><button class="btn quiet" id="exportAudit" type="button">Export audit report</button></div><div class="filelist" id="auditList"><div class="empty">Loading security activity…</div></div><div class="message" id="securityMsg" role="status"></div></section>
 <section class="card hidden" id="computerPage" aria-labelledby="computerTitle"><section class="card" id="cloudComputerWorkspace" aria-labelledby="cloudComputerTitle"><div class="card-head"><div><h2 id="cloudComputerTitle">Computer connection</h2><p class="sub">View the paired computer connection status. Screen streaming and remote control are not available in this cloud release.</p></div><span class="pill">Read-only status</span></div></section><div class="card-head"><div><h2 id="computerTitle">ThinkPad screen</h2><p class="sub">View the desktop of your connected ThinkPad from this phone.</p></div><span class="pill">Private session</span></div><div class="actions"><button class="btn primary" id="liveScreen" type="button">Connect live screen</button><span class="message" id="screenStatus" role="status">Connect to see and touch your ThinkPad desktop.</span><button class="btn secondary" id="audioStreamButton" type="button">Start system audio</button><span class="message" id="audioStatus" role="status">Audio is off.</span></div><audio id="systemAudioPlayer" controls playsinline preload="auto" style="display:none;width:100%;margin:10px 0"></audio><div class="screen-view-controls" role="group" aria-label="Screen controls"><button class="btn secondary" id="screenFit" type="button" aria-pressed="false" onclick="window.setScreenView('fit')">Fit screen</button><button class="btn secondary" id="screenCurrent" type="button" aria-pressed="true" onclick="window.setScreenView('current')">Current size</button><button class="btn secondary" id="screenRotate" type="button" onclick="window.rotateScreen()">Rotate screen</button><button class="btn secondary" id="screenCapture" type="button">Capture screenshot</button></div><div id="screenCapturePreview" class="hidden" style="margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px"><div class="actions"><b>Captured ThinkPad screen</b><button class="btn quiet" id="closeScreenCapture" type="button">Close</button></div><img id="screenCaptureImage" alt="Captured ThinkPad screen" style="display:block;width:100%;height:auto;max-height:65vh;object-fit:contain;border-radius:8px;margin:10px 0"><div class="actions"><button class="btn primary" id="saveScreenCapture" type="button">Save / Share image</button></div><span class="message" id="screenCaptureStatus" role="status"></span></div><div class="screen-frame" id="screenFrame"><div class="screen-placeholder">Your ThinkPad screen will appear here.</div></div><details class="remote-keyboard-toggle"><summary>Show ThinkPad keyboard</summary><div class="remote-kbd-head"><b>ThinkPad T430 Windows keyboard</b><span id="kbdShiftState">Caps off · Shift off</span></div><div class="keyboard-scroll"><div id="remoteKeyboard" class="remote-keyboard" aria-label="ThinkPad T430 Windows keyboard"><div class="key-row function-row"><button data-kbd-action="escape">Esc</button><button data-kbd-action="f1">F1</button><button data-kbd-action="f2">F2</button><button data-kbd-action="f3">F3</button><button data-kbd-action="f4">F4</button><button data-kbd-action="f5">F5</button><button data-kbd-action="f6">F6</button><button data-kbd-action="f7">F7</button><button data-kbd-action="f8">F8</button><button data-kbd-action="f9">F9</button><button data-kbd-action="f10">F10</button><button data-kbd-action="f11">F11</button><button data-kbd-action="f12">F12</button><button data-kbd-action="prtsc">PrtSc</button></div><div class="key-row"><button data-kbd="~">~</button><button data-kbd="1">!<small>1</small></button><button data-kbd="2">@<small>2</small></button><button data-kbd="3">#<small>3</small></button><button data-kbd="4">$<small>4</small></button><button data-kbd="5">%<small>5</small></button><button data-kbd="6">^<small>6</small></button><button data-kbd="7">&<small>7</small></button><button data-kbd="8">*<small>8</small></button><button data-kbd="9">(<small>9</small></button><button data-kbd="0">)<small>0</small></button><button data-kbd="-">_ -</button><button data-kbd="=">+ =</button><button class="wide" data-kbd-action="backspace">Backspace</button></div><div class="key-row"><button class="wide" data-kbd-action="tab">Tab</button><button data-kbd="q">q</button><button data-kbd="w">w</button><button data-kbd="e">e</button><button data-kbd="r">r</button><button data-kbd="t">t</button><button data-kbd="y">y</button><button data-kbd="u">u</button><button data-kbd="i">i</button><button data-kbd="o">o</button><button data-kbd="p">p</button><button data-kbd="[">{ [</button><button data-kbd="]">} ]</button><button class="wide" data-kbd-action="enter">Enter</button></div><div class="key-row"><button class="wide mod" data-kbd-action="capslock">Caps</button><button data-kbd="a">a</button><button data-kbd="s">s</button><button data-kbd="d">d</button><button data-kbd="f">f</button><button data-kbd="g">g</button><button data-kbd="h">h</button><button data-kbd="j">j</button><button data-kbd="k">k</button><button data-kbd="l">l</button><button data-kbd=";">: ;</button><button data-kbd="\">| \</button><button class="wide" data-kbd-action="enter">Enter</button></div><div class="key-row"><button class="xwide mod" data-kbd-action="shift">Shift</button><button data-kbd="z">z</button><button data-kbd="x">x</button><button data-kbd="c">c</button><button data-kbd="v">v</button><button data-kbd="b">b</button><button data-kbd="n">n</button><button data-kbd="m">m</button><button data-kbd=",">< > ,</button><button data-kbd=".">? .</button><button data-kbd="/">/ ?</button><button class="xwide mod" data-kbd-action="shift">Shift</button></div><div class="key-row"><button class="mod" data-kbd-action="ctrl">Ctrl</button><button class="mod" disabled>Fn</button><button class="mod" data-kbd-action="win">Win</button><button class="mod" data-kbd-action="alt">Alt</button><button class="xwide" data-kbd=" ">Space</button><button class="mod" data-kbd-action="alt">Alt</button><button class="mod" data-kbd-action="ctrl">Ctrl</button><button data-kbd-action="left">LEFT</button><button data-kbd-action="up">←</button><button data-kbd-action="down">DOWN</button><button data-kbd-action="right">RIGHT</button></div><div class="key-row arrow-row"><button data-kbd-action="insert">Insert</button><button data-kbd-action="delete">Delete</button><button data-kbd-action="home">Home</button><button data-kbd-action="end">End</button><button data-kbd-action="pageup">PgUp</button><button data-kbd-action="pagedown">PgDn</button><button data-kbd-action="ctrl+a">Ctrl+A</button><button data-kbd-action="ctrl+c">Ctrl+C</button><button data-kbd-action="ctrl+v">Ctrl+V</button><button data-kbd-action="ctrl+s">Ctrl+S</button><button data-kbd-action="alt+tab">Alt+Tab</button></div></div></div></details><p class="sub" id="screenMeta">Live video is streamed continuously while connected. Tap anywhere on the desktop image to click that exact spot. For best control, rotate your iPhone to landscape.</p><div class="notice">Privacy: screen images are available only to a paired device. Avoid capturing passwords or other private information visible on your desktop.</div></section>
@@ -1426,7 +1523,7 @@ async function init(){
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
   const initialDevices=await loadDevices();await ensureTransferClient();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);if(!transferClientTimer)transferClientTimer=setInterval(heartbeatTransferClient,20000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden)loadTransferHistory()},10000);await loadTransferHistory();if(phoneClient)await pollPhoneInbox();
-  const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(phoneClient?'welcome':initialDevices?.length?'overview':'welcome'))
+  const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
 function stopPairingWatch(){if(pairingWatchTimer)clearInterval(pairingWatchTimer);if(pairingExpiryTimer)clearInterval(pairingExpiryTimer);pairingWatchTimer=null;pairingExpiryTimer=null}
@@ -1441,7 +1538,14 @@ async function watchComputerPairing(){
   if(state.status==='connected'){
    const devices=await loadDevices();
    const online=(devices||[]).find(device=>device.connected&&(!pairingBaseline.has(device.id)||device.lastSeenAt!==pairingBaseline.get(device.id)));
-   if(online){say('pairState',online.name+' is online.');say('phoneMsg','Pairing complete. This computer is connected.');stopPairingWatch();return}
+   if(online){
+    say('pairState',online.name+' is online.');
+    say('phoneMsg','Pairing complete. This computer is connected.');
+    stopPairingWatch();pairingCode='';pairingExpiresAt=0;
+    $('phoneCodeBox').classList.add('hidden');$('beginPair').disabled=false;$('beginPair').textContent='Pair this computer';
+    showPage('overview');toast(online.name+' is online. Your workspace is ready.');
+    return;
+   }
    say('pairState','Phone approved. Finishing the secure connection…');
   }else if(state.status==='connecting')say('pairState','Approved. Connecting this computer…');
   else if(state.status==='expired'){stopPairingWatch();pairingCode='';say('pairState','This code expired. Start a new pairing.');$('beginPair').disabled=false;$('beginPair').textContent='Pair this computer';return}
@@ -1472,10 +1576,27 @@ $('approvePair').onclick=async()=>{
  if(!/^\d{6}$/.test(code)){say('phoneMsg','Enter all six digits from the computer.');return}
  const button=$('approvePair');button.disabled=true;button.textContent='Connecting…';
  try{
+  const before=await loadDevices();
+  const baseline=new Map((before||[]).map(device=>[device.id,device.lastSeenAt||null]));
   await api('/api/enrollments/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-  $('phonePairCode').value='';say('phoneMsg','Approved. Your computer is connecting automatically.');button.textContent='Approved';
-  const started=Date.now();const timer=setInterval(async()=>{const devices=await loadDevices();if((devices||[]).some(device=>device.connected)){clearInterval(timer);say('phoneMsg','Connected. Your computer is now Online.')}else if(Date.now()-started>30000){clearInterval(timer);say('phoneMsg','Approved. Waiting for the computer to finish connecting…')}},2500);
- }catch(error){say('phoneMsg',error.message||'Could not approve this computer.');button.disabled=false;button.textContent='Connect'}
+  $('phonePairCode').value='';say('phoneMsg','Approved. Waiting for your computer to check in securely…');button.textContent='Approved';
+  const started=Date.now();let checking=false;
+  const timer=setInterval(async()=>{
+   if(checking)return;checking=true;
+   try{
+    const devices=await loadDevices();
+    const online=(devices||[]).find(device=>device.connected&&(!baseline.has(device.id)||device.lastSeenAt!==baseline.get(device.id)));
+    if(online){
+     clearInterval(timer);say('phoneMsg','Connected. Your computer is now Online.');
+     button.disabled=false;button.textContent='APPROVE & CONNECT';
+     showPage('overview');toast(online.name+' connected. Your workspace is ready.');
+    }else if(Date.now()-started>30000){
+     clearInterval(timer);say('phoneMsg','Approved. The workspace will open when your computer completes its secure check-in. Make sure the PhoneBridge connector is running.');
+     button.disabled=false;button.textContent='APPROVE & CONNECT';
+    }
+   }finally{checking=false}
+  },2500);
+ }catch(error){say('phoneMsg',error.message||'Could not approve this computer.');button.disabled=false;button.textContent='APPROVE & CONNECT'}
 };
 
 async function showWorkspace(host){
@@ -1571,6 +1692,8 @@ async function loadDevices(){
   say('deviceCount',items.length+' paired computer'+(items.length===1?'':'s'));
   $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Background connector has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Tap Pair this computer, then enter the code on your phone and tap Connect.</div>';
   const online=items.filter(x=>x.connected).length;
+  say('pbxDeviceCount',String(items.length).padStart(2,'0'));
+  say('pbxOnlineCount',online?online+' ONLINE':items.length?'PAIRED · OFFLINE':'NOT PAIRED');
   $('connectedAs').textContent=online?online+' computer'+(online===1?' is':'s are')+' online and connected.':items.length?'Your computer is paired to this account but currently Offline. The cloud service being online does not mean the computer is connected.':'Cloud service is online. No computer has paired with this account yet.';
   say('deviceMsg',online?'Device list updated. '+online+' computer(s) confirmed online by a recent computer check-in.':'Device list updated. No computer has a recent computer check-in, so none is connected yet.');return items;
  }catch(e){say('deviceMsg',e.message);$('legacyDeviceList').innerHTML='<div class="empty"><b>Could not load devices</b>'+esc(e.message)+'</div>';return null}
@@ -2000,7 +2123,7 @@ $('copyNote').onclick=async()=>{try{await navigator.clipboard.writeText($('note'
 async function loadNote(){return loadNotes()}
 
 /* Accessible page navigation: one feature view at a time */
-const pageNames=['welcome','pairing'];
+const pageNames=['welcome','pairing','overview','transfer','library','computer','help'];
 function showPage(name){
  if(!pageNames.includes(name))name='welcome';
 

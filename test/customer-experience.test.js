@@ -12,9 +12,23 @@ test('cloud entrypoint presents the refreshed customer PhoneBridge navigation an
  const page=html();
  for(const label of ['Welcome','Overview','Pair a device','Computer','File transfer','Drive','Audio player','Video player','Sync','Workspace','Help & privacy','Setup','Security'])assert.match(page,new RegExp('>'+label+'(?: player)?<\/a>','i'));
  assert.match(page,/id="mainContent"/);assert.match(page,/id="accountGate"/);assert.match(page,/id="cloudStageNotice"/);
- assert.ok(page.includes("const pageNames=['welcome'"));assert.ok(page.includes("showPage(pageNames.includes(requested)?requested:(phoneClient?'welcome':initialDevices?.length?'overview':'welcome'))"));
+ assert.ok(page.includes("const pageNames=['welcome','pairing','overview'"));assert.ok(page.includes("showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))"));
  for(const feature of ['computer','transfer','library','sync','notes','audio','video','pairing','setup','help'])assert.match(page,new RegExp('data-page-link="'+feature+'"'));
  assert.match(page,/welcomePairButton/);assert.match(page,/feature-open/);assert.match(page,/PHONE-FIRST DASHBOARD/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
+});
+
+test('post-pairing opens the cinematic feature workspace only after a fresh online check-in',()=>{
+ const page=html();
+ assert.match(page,/const online=\(devices\|\|\[\]\)\.find\(device=>device\.connected&&\(!pairingBaseline\.has\(device\.id\)\|\|device\.lastSeenAt!==pairingBaseline\.get\(device\.id\)\)\)/);
+ assert.match(page,/showPage\('overview'\);toast\(online\.name\+' is online\. Your workspace is ready\.'\)/);
+ assert.match(page,/const baseline=new Map\(\(before\|\|\[\]\)\.map\(device=>\[device\.id,device\.lastSeenAt\|\|null\]\)\)/);
+ assert.match(page,/showPage\('overview'\);toast\(online\.name\+' connected\. Your workspace is ready\.'\)/);
+ assert.match(page,/class="pbx-feature-grid"/);
+ assert.equal((page.match(/class="pbx-feature(?: is-limited)?"/g)||[]).length,11);
+ for(const feature of ['File transfer','Private Drive','My devices','Audio files','Video files','Secure pairing','Help & privacy','Folder sync','Workspace notes','Screen access','Security controls'])assert.ok(page.includes('<strong>'+feature+'</strong>'),feature+' appears in the workspace');
+ assert.match(page,/@keyframes pbx-orbit/);assert.match(page,/@keyframes pbx-card-enter/);assert.match(page,/pbx-workspace-enter/);
+ assert.match(page,/body\[data-page\]:not\(\[data-page="overview"\]\) #workspace>#dynamicWorkspace/);
+ assert.match(page,/body\[data-page="computer"\] #workspace>#deviceManager/);
 });
 
 test('the unified light theme loads after legacy styles and covers desktop and mobile navigation',()=>{
