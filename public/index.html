@@ -1225,6 +1225,13 @@ body[data-page="pairing"] .pairing-footnote{width:min(100%,1180px);margin-left:a
  <a class="workspace-back-button" href="#overview" data-page-link="overview" aria-label="Back to PhoneBridge workspace"><span aria-hidden="true">←</span><b>BACK TO WORKSPACE</b></a>
  <span class="workspace-back-context">PHONEBRIDGE <i>/</i> YOUR PRIVATE SPACE</span>
 </div>
+<section id="sessionReviewPage" class="session-review-page hidden" aria-labelledby="sessionReviewTitle">
+ <div class="session-review-orbit" aria-hidden="true"></div>
+ <div class="session-review-heading"><span class="session-review-kicker"><i></i> EXISTING DEVICE CONNECTIONS</span><h1 id="sessionReviewTitle">Your current <em>sessions.</em></h1><p>PhoneBridge found devices already paired to your account. Choose a session to continue, or revoke a pairing you no longer use.</p></div>
+ <div class="session-review-list" id="currentSessionList" aria-live="polite"><div class="session-review-loading">Checking your paired devices…</div></div>
+ <div class="session-review-actions"><button class="session-pair-another" id="sessionPairAnother" type="button">Pair another device <b>↗</b></button><span id="sessionReviewStatus" role="status" aria-live="polite">Your account remains signed in while you manage paired devices.</span></div>
+ <div class="session-review-foot"><span>PRIVATE BY DESIGN</span><span>REVOKING A PAIRING REMOVES THAT COMPUTER’S ACCESS</span></div>
+</section>
 <section id="welcomePage" class="welcome-page hidden" aria-labelledby="welcomeTitle">
  <div class="cosmos-welcome">
   <div class="cosmos-stars stars-one"></div><div class="cosmos-stars stars-two"></div><div class="cosmos-nebula nebula-one"></div><div class="cosmos-nebula nebula-two"></div><div class="cosmos-orbit orbit-one"></div><div class="cosmos-orbit orbit-two"></div>
@@ -1449,6 +1456,49 @@ body[data-page="help"] .workspace-backbar{display:flex}
 @media(max-width:560px){.workspace-backbar{padding:12px 14px}.workspace-back-context{font-size:6px;letter-spacing:1px}.workspace-back-button{min-height:39px;padding:0 11px;font-size:8px}}
 @media(prefers-reduced-motion:reduce){.workspace-back-button,.workspace-back-button span{transition:none!important}}
 </style>
+<style id="pbx-current-session-review">
+/* Existing paired devices are reviewed before reopening the workspace. */
+body[data-page="session"]{min-height:100svh;overflow-x:hidden;background:radial-gradient(ellipse at 82% 4%,#174c753d,transparent 38%),radial-gradient(ellipse at 10% 82%,#24225a30,transparent 36%),#050914!important;color:#edf7ff!important}
+body[data-page="session"] .welcome-page,body[data-page="session"] .hero,body[data-page="session"] #pairScreen,body[data-page="session"] #workspace,body[data-page="session"] #setupPage,body[data-page="session"] #audioPlayerPage,body[data-page="session"] #videoPlayerPage,body[data-page="session"] .a11y-bar,body[data-page="session"] .nav,body[data-page="session"] .mobile-tabbar,body[data-page="session"] .footer{display:none!important}
+body[data-page="session"] .phonebridge-workspace{padding-top:0!important;background:transparent!important}
+body[data-page="session"] .shell{width:min(100% - 36px,1180px);max-width:1180px;min-height:calc(100svh - 68px);margin:0 auto;padding:0 0 24px!important;background:transparent!important}
+body[data-page="session"] .topbar{margin:0 0 20px;border:0;border-bottom:1px solid #65cfff25;border-radius:0;background:#050b18d9;box-shadow:none}
+.session-review-page{position:relative;isolation:isolate;display:block;width:100%;min-height:calc(100svh - 120px);padding:clamp(22px,5vw,64px);overflow:hidden;border:1px solid #315575a8;border-radius:26px;background:radial-gradient(ellipse at 78% 0%,#1d4e7c58,transparent 40%),linear-gradient(145deg,#0b1b2f,#071222 66%,#09172a);box-shadow:0 28px 80px #0005}
+.session-review-orbit{position:absolute;z-index:-1;right:-90px;top:-180px;width:440px;height:440px;border:1px solid #6bdfff22;border-radius:50%;box-shadow:0 0 0 36px #5abaff08,0 0 0 82px #5abaff05;pointer-events:none}
+.session-review-heading{position:relative;max-width:740px;margin-bottom:34px}
+.session-review-kicker{display:inline-flex;align-items:center;gap:9px;color:#85ddff;font-size:9px;font-weight:950;letter-spacing:2.2px}
+.session-review-kicker i{width:7px;height:7px;border-radius:50%;background:#66edc5;box-shadow:0 0 16px #66edc5}
+.session-review-heading h1{margin:17px 0 12px;color:#f4f9ff;font-size:clamp(42px,6vw,76px);line-height:.98;letter-spacing:-.07em;font-weight:900}
+.session-review-heading h1 em{font-style:normal;background:linear-gradient(100deg,#75eaff,#8daeff 58%,#c59bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.session-review-heading>p{max-width:610px;margin:0;color:#9bb3cd;font-size:13px;line-height:1.8}
+.session-review-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
+.session-review-card{display:flex;min-width:0;flex-direction:column;gap:18px;padding:20px;border:1px solid #345675a8;border-radius:18px;background:linear-gradient(145deg,#122b43e8,#0b1b2fe8);box-shadow:0 14px 36px #0003,inset 0 1px #fff0}
+.session-review-card-top{display:flex;align-items:flex-start;gap:13px}
+.session-review-device-icon{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border:1px solid #5bbfe879;border-radius:14px;background:linear-gradient(145deg,#1d5275,#14264c);color:#b8f3ff;font-size:15px;font-weight:950;box-shadow:0 0 24px #3bbcff20}
+.session-review-device-copy{flex:1;min-width:0}
+.session-review-device-copy h2{margin:2px 0 6px;overflow-wrap:anywhere;color:#f0f8ff;font-size:16px;font-weight:850}
+.session-review-device-copy p{margin:0;color:#819fbc;font-size:10px;line-height:1.6}
+.session-review-status{display:inline-flex;align-items:center;gap:7px;margin-top:10px;color:#83f0ce;font-size:8px;font-weight:900;letter-spacing:1.2px}
+.session-review-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#63e8bd;box-shadow:0 0 12px #63e8bd}
+.session-review-status.is-offline{color:#e6b3a5}
+.session-review-status.is-offline:before{background:#d88b79;box-shadow:0 0 10px #d88b79}
+.session-review-card-meta{display:flex;flex-wrap:wrap;gap:6px 15px;padding-top:13px;border-top:1px solid #42617d55;color:#7895b3;font-size:9px}
+.session-review-card-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:auto}
+.session-continue-button,.session-revoke-button,.session-pair-another{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:43px;padding:0 15px;border-radius:10px;font-size:9px;font-weight:950;letter-spacing:.6px;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s}
+.session-continue-button{flex:1;border:1px solid #a8f1ff;background:linear-gradient(105deg,#8eeaff,#68bff5 58%,#a99cff);color:#071425;box-shadow:0 8px 24px #3bafff25}
+.session-revoke-button{border:1px solid #8f5864;background:#281a2a;color:#f1b5c0}
+.session-continue-button:hover,.session-revoke-button:hover,.session-pair-another:hover{transform:translateY(-2px)}
+.session-continue-button:disabled,.session-revoke-button:disabled{opacity:.55;cursor:wait;transform:none}
+.session-review-empty,.session-review-loading{grid-column:1/-1;padding:26px;border:1px dashed #426382;border-radius:16px;background:#0b1c2dcc;color:#a9c0d8;font-size:12px;line-height:1.7}
+.session-review-empty strong{display:block;margin-bottom:5px;color:#eef8ff;font-size:15px}
+.session-review-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px}
+.session-pair-another{border:1px solid #416789;background:#102940;color:#d9f3ff}
+.session-pair-another b{font-size:15px;color:#86e8ff}
+#sessionReviewStatus{color:#7897b6;font-size:9px;line-height:1.6}
+.session-review-foot{display:flex;justify-content:space-between;gap:12px;margin-top:34px;padding-top:16px;border-top:1px solid #46617a44;color:#627f9d;font-size:7px;font-weight:900;letter-spacing:1.5px}
+@media(max-width:620px){body[data-page="session"] .shell{width:calc(100% - 18px);padding-bottom:12px!important}body[data-page="session"] .topbar{margin-bottom:10px;padding:10px 12px}.session-review-page{min-height:calc(100svh - 88px);padding:22px 15px;border-radius:19px}.session-review-heading{margin-bottom:24px}.session-review-heading h1{font-size:clamp(39px,12vw,55px)}.session-review-heading>p{font-size:11px}.session-review-card{padding:15px}.session-review-card-actions{flex-direction:column}.session-continue-button,.session-revoke-button{width:100%}.session-review-actions{align-items:stretch;flex-direction:column}.session-pair-another{width:100%}.session-review-foot{flex-direction:column;font-size:6px}}
+@media(prefers-reduced-motion:reduce){.session-continue-button,.session-revoke-button,.session-pair-another{transition:none!important}}
+</style>
 <section id="workspace" class="hidden">
  <section id="dynamicWorkspace" aria-label="PhoneBridge connected workspace">
  <div class="pbx-backdrop" aria-hidden="true"><i class="pbx-starfield"></i><i class="pbx-ambient pbx-ambient-one"></i><i class="pbx-ambient pbx-ambient-two"></i></div>
@@ -1584,7 +1634,7 @@ async function init(){
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
   const initialDevices=await loadDevices();await ensureTransferClient();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);if(!transferClientTimer)transferClientTimer=setInterval(heartbeatTransferClient,20000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden)loadTransferHistory()},10000);await loadTransferHistory();if(phoneClient)await pollPhoneInbox();
-  const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))
+  renderCurrentSessions(initialDevices);const requested=location.hash.slice(1);showPage(initialDevices===null||initialDevices?.length?'session':pageNames.includes(requested)?requested:'welcome')
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
 function stopPairingWatch(){if(pairingWatchTimer)clearInterval(pairingWatchTimer);if(pairingExpiryTimer)clearInterval(pairingExpiryTimer);pairingWatchTimer=null;pairingExpiryTimer=null}
@@ -1747,6 +1797,12 @@ async function heartbeatTransferClient(){
 async function loadTransferPhones(){
  try{const data=await api('/api/transfer-clients');transferPhones=data.phones||[];renderPcDeviceChoices();return transferPhones}catch(error){transferPhones=[];renderPcDeviceChoices();return []}
 }
+function renderCurrentSessions(devices){
+ const list=$('currentSessionList');if(!list)return;
+ if(!Array.isArray(devices)){list.innerHTML='<div class="session-review-empty"><strong>Could not check your current sessions.</strong>PhoneBridge could not load your paired devices. Refresh the page and try again before continuing.</div>';return}
+ if(!devices.length){list.innerHTML='<div class="session-review-empty"><strong>No paired computers remain.</strong>Your previous pairing has been revoked or removed. You can start a new secure pairing whenever you are ready.</div>';return}
+ list.innerHTML=devices.map(device=>{const name=device.name||'Paired computer',lastSeen=device.lastSeenAt?'Last check-in '+new Date(device.lastSeenAt).toLocaleString():'No computer check-in recorded yet',created=device.createdAt?'Paired '+new Date(device.createdAt).toLocaleDateString():'';return '<article class="session-review-card"><div class="session-review-card-top"><div class="session-review-device-icon" aria-hidden="true">PB</div><div class="session-review-device-copy"><h2>'+esc(name)+'</h2><p>'+esc(device.deviceType||'Computer')+' · PhoneBridge account</p><span class="session-review-status '+(device.connected?'':'is-offline')+'">'+(device.connected?'Online':'Offline')+'</span></div></div><div class="session-review-card-meta"><span>'+esc(lastSeen)+'</span>'+(created?'<span>'+esc(created)+'</span>':'')+'</div><div class="session-review-card-actions"><button class="session-continue-button" type="button" data-session-continue="'+esc(device.id)+'">Continue with this session <b>↗</b></button><button class="session-revoke-button" type="button" data-session-revoke="'+esc(device.id)+'">Revoke pairing</button></div></article>'}).join('');
+}
 async function loadDevices(){
  try{
   const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;await loadTransferPhones();renderPcDeviceChoices();
@@ -1783,6 +1839,17 @@ function renderPcDeviceChoices(){
  }
 }
 $('legacyRefreshDevices').onclick=loadDevices;
+$('currentSessionList').addEventListener('click',async event=>{
+ const keep=event.target.closest('[data-session-continue]'),revoke=event.target.closest('[data-session-revoke]');
+ if(keep){const id=keep.dataset.sessionContinue;const device=pcPairedDevices.find(item=>item.id===id);if(phoneClient&&device?.connected&&$('pcDeviceSelect'))$('pcDeviceSelect').value=id;showPage('overview');toast('Your PhoneBridge session is ready.');return}
+ if(!revoke)return;
+ const id=revoke.dataset.sessionRevoke,device=pcPairedDevices.find(item=>item.id===id);if(!device)return;
+ if(!confirm('Revoke the pairing for '+device.name+'? This computer will lose access to your PhoneBridge account. Your PhoneBridge sign-in will remain active.'))return;
+ const card=revoke.closest('.session-review-card'),buttons=card?.querySelectorAll('button');buttons?.forEach(button=>button.disabled=true);revoke.textContent='Revoking…';
+ try{await api('/api/devices/'+encodeURIComponent(id),{method:'DELETE'});const remaining=await loadDevices();renderCurrentSessions(remaining);say('sessionReviewStatus',device.name+' pairing revoked. Your account is still signed in.');toast('Pairing revoked')}
+ catch(error){say('sessionReviewStatus','Could not revoke this pairing: '+error.message);buttons?.forEach(button=>button.disabled=false);revoke.textContent='Revoke pairing'}
+});
+$('sessionPairAnother').addEventListener('click',()=>showPage('pairing'));
 
 $('legacyDeviceList').addEventListener('click',async event=>{const rename=event.target.closest('[data-cloud-rename]'),remove=event.target.closest('[data-cloud-revoke]');if(!rename&&!remove)return;const id=rename?rename.dataset.cloudRename:remove.dataset.cloudRevoke;const row=(rename||remove).closest('.file');const current=row?.querySelector('.file-name b')?.textContent||'computer';try{if(rename){const name=prompt('Choose a name for this computer:',current)?.trim();if(!name)return;await api('/api/devices/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});say('deviceMsg','Computer renamed.')}else{if(!confirm('Remove '+current+' from this account? The saved computer credential will be revoked.'))return;await api('/api/devices/'+encodeURIComponent(id),{method:'DELETE'});say('deviceMsg','Computer removed and its computer credential revoked.')}await loadDevices()}catch(error){say('deviceMsg',error.message)}});
 let auditCache=[];
@@ -2184,13 +2251,14 @@ $('copyNote').onclick=async()=>{try{await navigator.clipboard.writeText($('note'
 async function loadNote(){return loadNotes()}
 
 /* Accessible page navigation: one feature view at a time */
-const pageNames=['welcome','pairing','overview','transfer','library','computer','help'];
+const pageNames=['welcome','session','pairing','overview','transfer','library','computer','help'];
 function showPage(name){
  if(!pageNames.includes(name))name='welcome';
 
   $('setupPage').classList.toggle('hidden',name!=='setup');
 
  $('computerPage').classList.toggle('hidden',name!=='computer');
+ $('sessionReviewPage').classList.toggle('hidden',name!=='session');
  if(name!=='computer'&&screenTimer){screenRunning=false;disconnectLiveScreen();$('liveScreen').textContent='Connect live screen'}
  document.body.dataset.page=name;if(name==='audio'||name==='video')renderMediaLibraries();if(name==='sync')loadSyncManifest();if(name==='security'&&isHost)loadSecurity();if(name==='setup'&&isHost)runSetupChecks();
  document.querySelectorAll('[data-page-link]').forEach(a=>{

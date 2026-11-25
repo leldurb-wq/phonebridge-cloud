@@ -12,7 +12,7 @@ test('cloud entrypoint presents the refreshed customer PhoneBridge navigation an
  const page=html();
  for(const label of ['Welcome','Overview','Pair a device','Computer','File transfer','Drive','Audio player','Video player','Sync','Workspace','Help & privacy','Setup','Security'])assert.match(page,new RegExp('>'+label+'(?: player)?<\/a>','i'));
  assert.match(page,/id="mainContent"/);assert.match(page,/id="accountGate"/);assert.match(page,/id="cloudStageNotice"/);
- assert.ok(page.includes("const pageNames=['welcome','pairing','overview'"));assert.ok(page.includes("showPage(pageNames.includes(requested)?requested:(initialDevices?.length?'overview':'welcome'))"));
+ assert.ok(page.includes("const pageNames=['welcome','session','pairing','overview'"));assert.ok(page.includes("renderCurrentSessions(initialDevices);const requested=location.hash.slice(1);showPage(initialDevices===null||initialDevices?.length?'session':pageNames.includes(requested)?requested:'welcome')"));
  for(const feature of ['computer','transfer','library','sync','notes','audio','video','pairing','setup','help'])assert.match(page,new RegExp('data-page-link="'+feature+'"'));
  assert.match(page,/welcomePairButton/);assert.match(page,/feature-open/);assert.match(page,/PHONE-FIRST DASHBOARD/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
 });
@@ -98,6 +98,18 @@ test('migrated inline browser script parses and contains no legacy certificate o
  const page=html();const scripts=[...page.matchAll(/<script>([\s\S]*?)<\/script>/g)];
  assert.equal(scripts.length,1);assert.doesNotThrow(()=>new vm.Script(scripts[0][1]));
  assert.doesNotMatch(page,/phonebridge-root\.cer|serviceWorker\.register|localStorage\.removeItem\(['"]pb31-token/);
+});
+
+test('a saved paired device opens a session review with continue and revoke actions before workspace entry',()=>{
+ const page=html();
+ assert.match(page,/id="sessionReviewPage"/);assert.match(page,/id="currentSessionList"/);
+ assert.match(page,/function renderCurrentSessions\(devices\)/);
+ assert.match(page,/data-session-continue/);assert.match(page,/data-session-revoke/);
+ assert.match(page,/showPage\('overview'\);toast\('Your PhoneBridge session is ready\.'/);
+ assert.match(page,/api\('\/api\/devices\/'.*method:'DELETE'/);
+ assert.match(page,/sessionReviewPage'\)\.classList\.toggle\('hidden',name!=='session'\)/);
+ assert.match(page,/Revoke the pairing for .*Your PhoneBridge sign-in will remain active/);
+ assert.match(page,/body\[data-page="session"\].*#workspace/s);
 });
 
 test('device management APIs bind rename and revoke operations to the authenticated owner',()=>{
