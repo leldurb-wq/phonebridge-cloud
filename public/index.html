@@ -1154,6 +1154,52 @@ body[data-page="pairing"] .pairing-stage{width:100%;padding:20px 0 30px}
 @media(max-height:740px) and (min-width:701px){.pairing-cinematic{min-height:auto}.pairing-heading{margin-top:15px}.pairing-transfer-scene{height:230px}.pairing-action-panel{padding:14px 20px}.pairing-footnote{margin-top:15px}}
 @media(prefers-reduced-motion:reduce){.pairing-cinematic *,body.reduce-motion .pairing-cinematic *{animation:none!important;transition:none!important}}
 </style>
+<style id="pb-pairing-fullscreen-style">
+/* Full-viewport pairing experience */
+body[data-page="pairing"]{min-height:100svh;padding:0!important;overflow-x:hidden}
+body[data-page="pairing"] .shell{display:flex;flex-direction:column;max-width:none!important;width:100%;min-height:100svh;margin:0;padding:0!important}
+body[data-page="pairing"] .topbar{flex:0 0 68px;min-height:68px;margin:0;padding:10px clamp(16px,3.5vw,54px)!important}
+body[data-page="pairing"] .phonebridge-workspace{display:flex;flex:1 0 auto;flex-direction:column;width:100%;max-width:none!important;min-height:calc(100svh - 68px);margin:0!important;padding:0!important;border:0;border-radius:0;background:transparent}
+body[data-page="pairing"] #pairScreen{display:block!important;flex:1 0 auto;width:100%;max-width:none!important;min-height:calc(100svh - 68px);margin:0!important}
+body[data-page="pairing"] .pairing-stage{display:block;width:100%;min-height:calc(100svh - 68px);padding:0!important}
+body[data-page="pairing"] .pairing-cinematic{width:100%;min-height:calc(100svh - 68px);margin:0;padding:clamp(14px,2.2vh,28px) clamp(18px,4vw,64px) clamp(12px,2vh,24px);border-left:0;border-right:0;border-radius:0;box-shadow:none;justify-content:space-between}
+body[data-page="pairing"] .pairing-heading{margin:clamp(10px,1.8vh,24px) auto 0;max-width:820px}
+body[data-page="pairing"] .pairing-heading h1{font-size:clamp(44px,5.8vw,78px)}
+body[data-page="pairing"] .pairing-heading p{max-width:570px;font-size:13px}
+body[data-page="pairing"] .pairing-transfer-scene{width:min(100%,1180px);height:clamp(250px,39vh,430px);max-height:44vh;min-height:230px}
+body[data-page="pairing"] .pairing-phone-art{left:17%;width:140px}
+body[data-page="pairing"] .pairing-phone-frame{width:108px;height:202px}
+body[data-page="pairing"] .pairing-laptop-art{right:12%;width:47%;max-width:440px}
+body[data-page="pairing"] .pairing-action-panel{width:min(100%,960px);padding:23px 30px;gap:30px}
+body[data-page="pairing"] .pairing-footnote{width:min(100%,1180px);margin-left:auto;margin-right:auto}
+@media(max-width:700px){
+ body[data-page="pairing"]{padding-bottom:0!important}
+ body[data-page="pairing"] .shell{padding:0!important}
+ body[data-page="pairing"] .topbar{flex-basis:60px;min-height:60px;padding:9px 15px!important}
+ body[data-page="pairing"] #pairScreen,body[data-page="pairing"] .pairing-stage{min-height:calc(100svh - 60px)}
+ body[data-page="pairing"] .pairing-cinematic{min-height:calc(100svh - 60px);padding:12px 13px 10px;border-radius:0}
+ body[data-page="pairing"] .pairing-heading{margin-top:clamp(8px,1.4vh,16px)}
+ body[data-page="pairing"] .pairing-heading h1{font-size:clamp(38px,10vw,53px)}
+ body[data-page="pairing"] .pairing-heading p{max-width:360px;font-size:11px}
+ body[data-page="pairing"] .pairing-transfer-scene{width:100%;height:clamp(165px,27vh,245px);max-height:none;min-height:155px;margin:2px auto 0}
+ body[data-page="pairing"] .pairing-phone-art{left:4%;top:16%;width:116px}
+ body[data-page="pairing"] .pairing-phone-frame{width:92px;height:175px}
+ body[data-page="pairing"] .pairing-laptop-art{right:1%;top:29%;width:53%;max-width:330px}
+ body[data-page="pairing"] .pairing-action-panel{width:100%;grid-template-columns:1fr;gap:10px;padding:13px 14px;border-radius:15px}
+ body[data-page="pairing"] .pairing-action-copy{text-align:center}
+ body[data-page="pairing"] .pairing-action-description{margin:0 auto}
+ body[data-page="pairing"] .pairing-controls{max-width:460px;width:100%;margin:0 auto}
+ body[data-page="pairing"] .pairing-footnote{padding-top:9px;font-size:6px}
+}
+@media(max-height:620px){
+ body[data-page="pairing"] .pairing-cinematic{padding-top:10px;padding-bottom:8px}
+ body[data-page="pairing"] .pairing-heading{margin-top:6px}
+ body[data-page="pairing"] .pairing-heading h1{font-size:clamp(34px,5vw,52px);margin:7px 0}
+ body[data-page="pairing"] .pairing-heading p{font-size:10px}
+ body[data-page="pairing"] .pairing-transfer-scene{height:clamp(140px,26vh,195px);min-height:140px}
+ body[data-page="pairing"] .pairing-action-panel{padding:11px 14px}
+}
+</style>
 </head>
 <body data-page="overview"><section id="accountGate" aria-labelledby="accountGateTitle"><div class="account-auth-card"><div class="account-auth-brand"><div class="account-auth-mark">PB</div><div><b>Phone Bridge</b><small>YOUR PRIVATE ACCOUNT</small></div></div><h1 id="accountGateTitle">Welcome to Phone Bridge</h1><p id="authDescription">Sign in to open your Phone Bridge workspace.</p><form id="accountLoginForm"><label for="accountLoginEmail">Email address</label><input id="accountLoginEmail" type="email" autocomplete="username" required placeholder="you@example.com"><label for="accountLoginPassword">Password</label><input id="accountLoginPassword" type="password" autocomplete="current-password" required placeholder="Your password"><button id="accountLoginButton" type="submit">Sign in</button></form><form id="accountRegisterForm" hidden><label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" required placeholder="you@example.com"><label for="registerPassword">Password</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"><button id="registerButton" type="submit">Create account</button></form><form id="accountRecoveryForm" hidden><label for="recoveryEmail">Email address</label><input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"><button id="recoveryButton" type="submit">Send password recovery email</button></form><form id="passwordUpdateForm" hidden><label for="recoveryPassword">New password</label><input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required><button type="submit">Update password</button></form><form id="phoneAuthForm" hidden><label for="accountPhone">Phone number</label><input id="accountPhone" type="tel" autocomplete="tel" placeholder="+1 555 010 1234" required><label for="phoneOtp" id="phoneOtpLabel" hidden>Verification code</label><input id="phoneOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="SMS code" hidden><button id="phoneAuthButton" type="submit">Send sign-in code</button></form><button class="account-auth-link" id="googleAuthButton" type="button">Continue with Google</button><div id="accountAuthMessage" class="account-auth-message" role="status" aria-live="polite">Checking account service?</div><div class="account-auth-links"><button class="account-auth-link" type="button" data-auth-view="login">Sign in</button><button class="account-auth-link" type="button" data-auth-view="register">Create account</button><button class="account-auth-link" type="button" data-auth-view="recovery">Forgot password?</button><button class="account-auth-link" type="button" data-auth-view="phone">Use phone</button></div></div></section><div class="launch-screen" id="launchScreen" aria-hidden="true"><div class="launch-symbol"><svg viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="M17 51C25 17 75 17 83 51" stroke="#78DDF2" stroke-width="6" stroke-linecap="round"/><path d="M17 51V78M83 51V78M10 80H90" stroke="#4B9DFA" stroke-width="5" stroke-linecap="round"/><circle cx="17" cy="51" r="6" fill="#D9F7FF"/><circle cx="50" cy="26" r="6" fill="#D9F7FF"/><circle cx="83" cy="51" r="6" fill="#D9F7FF"/></svg></div><strong>Phone Bridge</strong><span>Your devices. Your private workspace.</span><div class="launch-progress"></div></div><a class="skip-link" href="#mainContent">Skip to main content</a><main class="shell" id="mainContent">
 <header class="topbar">
