@@ -1474,8 +1474,8 @@ async function renderFilePreview(name,url,stage){
 function showPreview(){ $('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
 async function openFilePreview(id){
  const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}
- $('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' | '+(f.folder||'Unfiled')+' | Stored in your private cloud Drive';$('previewDownload').download=f.name;$('previewStatus').textContent='Preparing preview...';showPreview();
- try{const url=await authenticatedDrivePreviewUrl(id,f.name);$('previewDownload').href=url;await renderFilePreview(f.name,url,$('previewStage'));$('previewStatus').textContent='Preview ready | Download original is always available'}
+ $('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' | '+(f.folder||'Unfiled')+' | Stored in your private cloud Drive';$('previewDownload').href='/api/download?id='+encodeURIComponent(id);$('previewDownload').download=f.name;$('previewStatus').textContent='Preparing preview...';showPreview();
+ try{const url=await authenticatedDrivePreviewUrl(id,f.name);await renderFilePreview(f.name,url,$('previewStage'));$('previewStatus').textContent='Preview ready | Download original is always available'}
  catch(error){$('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');$('previewStatus').textContent='Preview unavailable | original file is safe to download'}
 }
 $('previewClose').onclick=closeFilePreview;$('previewOverlay').addEventListener('click',e=>{if(e.target===$('previewOverlay'))closeFilePreview()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('previewOverlay').classList.contains('hidden'))closeFilePreview()});
