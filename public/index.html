@@ -657,13 +657,15 @@ html{scroll-padding-top:90px}
 body[data-page]{background:radial-gradient(ellipse at 76% 0%,#1b5d8730,transparent 38%),linear-gradient(180deg,#07111f,#09182a 72%,#07111f);color:var(--pb-text)}
 body[data-page]:before{opacity:.13;background-image:linear-gradient(#7ddcff12 1px,transparent 1px),linear-gradient(90deg,#7ddcff12 1px,transparent 1px);background-size:58px 58px}
 .shell{max-width:none;width:100%;padding:0;margin:0}
-.topbar{position:sticky;top:0;padding:14px 30px 14px 292px;min-height:78px;background:#07111feF;border-bottom:1px solid #1d3855;backdrop-filter:blur(18px)}
+.topbar{position:sticky;top:0;padding:14px 30px;min-height:78px;background:#07111feF;border-bottom:1px solid #1d3855;backdrop-filter:blur(18px)}
 .brand .logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#8de9ff,#3985f5);color:#07111f;box-shadow:0 0 28px #38bdf833}
 .brand strong{color:#f3f8ff;font-size:16px}.brand small{color:#7f9ab8}
 .top-actions{gap:8px}.top-actions .a11y-btn{background:#10233a;border-color:#294766;color:#d9efff}.top-actions .role{color:#91dfff;border-color:#285577;background:#0c2035}
 .status{background:#0b302c;border-color:#1c6558;color:#7bf0cf}
-.phonebridge-workspace{margin:0;padding:0 34px 50px 292px;border:0;border-radius:0;background:transparent;min-height:calc(100vh - 78px)}
+.phonebridge-workspace{margin:0;padding:0 34px 50px;border:0;border-radius:0;background:transparent;min-height:calc(100vh - 78px)}
 .phonebridge-workspace>p{display:none}
+/* Retain legacy navigation targets for compatibility, but remove the old sidebar and bottom nav from the interface. */
+.phonebridge-workspace>.nav,.phonebridge-workspace>.mobile-tabbar{display:none!important}
 .nav{position:fixed;z-index:90;left:0;top:0;bottom:0;width:260px;display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-y:auto;overflow-x:hidden;padding:98px 15px 170px;background:#081526;border-right:1px solid #1d3855;box-shadow:12px 0 38px #0002;scrollbar-width:thin}
 .nav-group-label{padding:15px 12px 5px;color:#6283a5;font-size:9px;font-weight:800;letter-spacing:1.8px}
 .nav a{display:flex;align-items:center;gap:12px;min-height:43px;padding:10px 13px;border:1px solid transparent;border-radius:11px;color:#a8bfd7;font-size:12px;font-weight:650;letter-spacing:0;white-space:nowrap}
@@ -697,7 +699,7 @@ body[data-page] .hero p{color:#9bb1c9}
 body[data-page] .eyebrow{color:#65d7fa}
 body[data-page] .footer{border-color:#1d3855;color:#708ba5}
 body[data-page] .toast{background:#7de5fa;color:#061423}
-#accountSettingsPanel{margin:16px 34px 0 292px}
+#accountSettingsPanel{margin:16px 34px 0}
 .connection-banner{margin:20px 0 0;padding:15px 18px;border:1px solid #315674;border-radius:14px;background:#10243a;color:#eaf5ff}
 .connection-banner p{margin:3px 0 0;color:#9bb1c9;font-size:11px}
 .connection-banner button{margin-left:12px}
@@ -746,7 +748,7 @@ body[data-page="pairing"] .welcome-page,body[data-page="overview"] .welcome-page
 @media(max-width:900px){.welcome-hero{grid-template-columns:1fr 1fr;gap:12px}.welcome-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-laptop{left:0;width:220px}.device-phone{right:2%}}
 @media(max-width:720px){
  .topbar{padding:10px 14px;min-height:64px}.top-actions{gap:5px}.top-actions .role{display:none}.top-actions .a11y-btn{font-size:10px;padding:6px 8px}
- .phonebridge-workspace{padding:0 14px 92px}
+ .phonebridge-workspace{padding:0 14px 32px}
  .nav{top:auto;bottom:0;left:0;right:0;width:auto;height:72px;display:flex;flex-direction:row;align-items:center;gap:5px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));border-right:0;border-top:1px solid #1d3855;overflow-x:auto;overflow-y:hidden;background:#081526f5;backdrop-filter:blur(20px)}
  .nav-group-label{display:none}
  .nav a{flex:0 0 auto;min-height:46px;padding:9px 12px;border-radius:12px;font-size:10px}
@@ -1162,7 +1164,8 @@ body[data-page="pairing"] .pairing-stage{width:100%;padding:20px 0 30px}
 <section id="accountSettingsPanel" class="card hidden" aria-labelledby="accountSettingsTitle"><div class="card-head"><h2 id="accountSettingsTitle">Account settings</h2><button class="btn quiet" id="closeAccountSettings" type="button">Close</button></div><p class="sub">Changes are managed by your signed-in Supabase account.</p><label class="muted" for="newEmail">New email address</label><input class="field" id="newEmail" type="email" autocomplete="email" placeholder="name@example.com"><button class="btn secondary" id="changeEmailButton" type="button">Update email</button><label class="muted" for="newAccountPassword" style="display:block;margin-top:12px">New password</label><input class="field" id="newAccountPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"><button class="btn secondary" id="changePasswordButton" type="button">Update password</button><div id="accountSettingsStatus" class="message" role="status"></div></section><div class="install-panel" id="installPanel" hidden role="region" aria-label="Install Phone Bridge"><div><strong id="installTitle">Install Phone Bridge</strong><p id="installHelp">Add Phone Bridge to your home screen for an app-like experience.</p></div><button id="installDismiss" type="button">Got it</button></div>
 <section class="phonebridge-workspace" id="phoneBridgeWorkspace"><p>This is your PhoneBridge workspace. Pairing and device status are connected to the cloud. File transfer and private cloud Drive are available. Sync automation, media streaming, screen viewing and remote input are not available in this cloud release.</p>
 <div class="connection-banner" id="connectionBanner" hidden data-state="offline" role="status" aria-live="polite"><div><strong id="connectionTitle">Connection unavailable</strong><p id="connectionDetail">The app is open, but it cannot reach your ThinkPad.</p></div><button id="connectionRetry" type="button">Try again</button></div>
-<section id="cloudStageNotice" class="cloud-stage-notice" hidden role="status"><strong>Phone Bridge cloud workspace</strong><span>Pair your computer and check its online or offline status. File transfer and private cloud Drive are available. Sync automation, media streaming, screen viewing and remote input are not available in this cloud release.</span></section><nav class="nav" aria-label="Main navigation">
+<section id="cloudStageNotice" class="cloud-stage-notice" hidden role="status"><strong>Phone Bridge cloud workspace</strong><span>Pair your computer and check its online or offline status. File transfer and private cloud Drive are available. Sync automation, media streaming, screen viewing and remote input are not available in this cloud release.</span></section>
+<nav class="nav" aria-label="Main navigation" hidden>
  <span class="nav-group-label">YOUR SPACE</span>
  <a href="#welcome" data-page-link="welcome">Welcome</a><a href="#overview" data-page-link="overview">Overview</a><a href="#pairing" data-page-link="pairing">Pair a device</a><a href="#computer" data-page-link="computer">Computer</a>
  <span class="nav-group-label">FEATURES</span>
@@ -1170,7 +1173,7 @@ body[data-page="pairing"] .pairing-stage{width:100%;padding:20px 0 30px}
  <span class="nav-group-label">MORE</span>
  <a href="#help" data-page-link="help">Help & privacy</a><a href="#setup" id="setupNav" data-page-link="setup">Setup</a><a href="#security" id="securityNav" data-page-link="security">Security</a>
 </nav>
-<nav class="mobile-tabbar" aria-label="Phone navigation"><a href="#welcome" data-page-link="welcome"><span aria-hidden="true">⌂</span><small>Home</small></a><a href="#transfer" data-page-link="transfer"><span aria-hidden="true">⇄</span><small>Transfer</small></a><a href="#library" data-page-link="library"><span aria-hidden="true">▤</span><small>Drive</small></a><a href="#computer" data-page-link="computer"><span aria-hidden="true">▣</span><small>Computer</small></a><a href="#help" data-page-link="help"><span aria-hidden="true">•••</span><small>More</small></a></nav>
+<nav class="mobile-tabbar" aria-label="Phone navigation" hidden><a href="#welcome" data-page-link="welcome"><span aria-hidden="true">⌂</span><small>Home</small></a><a href="#transfer" data-page-link="transfer"><span aria-hidden="true">⇄</span><small>Transfer</small></a><a href="#library" data-page-link="library"><span aria-hidden="true">▤</span><small>Drive</small></a><a href="#computer" data-page-link="computer"><span aria-hidden="true">▣</span><small>Computer</small></a><a href="#help" data-page-link="help"><span aria-hidden="true">•••</span><small>More</small></a></nav>
 <section id="welcomePage" class="welcome-page hidden" aria-labelledby="welcomeTitle">
  <div class="cosmos-welcome">
   <div class="cosmos-stars stars-one"></div><div class="cosmos-stars stars-two"></div><div class="cosmos-nebula nebula-one"></div><div class="cosmos-nebula nebula-two"></div><div class="cosmos-orbit orbit-one"></div><div class="cosmos-orbit orbit-two"></div>
