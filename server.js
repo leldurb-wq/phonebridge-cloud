@@ -13,7 +13,7 @@ const port = Number(process.env.PORT || 3000);
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const appOrigin = (process.env.APP_ORIGIN || '').replace(/\/+$/, '');
+const allowedOrigins = new Set([...(process.env.APP_ORIGIN || '').split(',').map(origin => origin.trim().replace(/\/+$/, '')).filter(Boolean), 'https://phonebridge.msbundle.store']);
 const missingSupabaseConfig = [];
 if (!/^https:\/\/.+\.supabase\.co\/?$/.test(supabaseUrl)) missingSupabaseConfig.push('SUPABASE_URL');
 if (!supabaseAnonKey || /YOUR_SUPABASE/i.test(supabaseAnonKey)) missingSupabaseConfig.push('SUPABASE_ANON_KEY');
@@ -53,10 +53,10 @@ app.use((req,res,next)=>{
   next();
 });
 app.use((req,res,next)=>{
-  if (appOrigin) {
+  if (allowedOrigins.size) {
     const origin = req.get('origin');
     if (origin) {
-      if (origin === appOrigin) {
+      if (allowedOrigins.has(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Vary','Origin');
       } else {

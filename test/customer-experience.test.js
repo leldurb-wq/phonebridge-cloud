@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -132,6 +132,14 @@ test('PhoneBridge pairing generates the code on the computer and asks the phone 
  const page=html();assert.match(page,/id="pairingCodeDisplay"/);assert.match(page,/Pair this computer/);assert.match(page,/http:\/\/127\.0\.0\.1:32145\/pairing\/start/);
  assert.match(page,/id="phonePairCode"/);assert.match(page,/id="approvePair"/);assert.ok(page.includes("/api/enrollments/approve"));
  assert.match(page,/fresh secure check-in/);const pairing=page.slice(page.indexOf('id="phonePanel"'),page.indexOf('id="workspace"'));assert.doesNotMatch(pairing,/phone-generated code|Agent window/);
+});
+
+test('cloud CORS allows the Render app and the official PhoneBridge custom domain only',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ assert.match(server,/process\.env\.APP_ORIGIN[\s\S]*https:\/\/phonebridge\.msbundle\.store/);
+ assert.match(server,/allowedOrigins\.has\(origin\)/);
+ assert.match(server,/Access-Control-Allow-Headers','Authorization, Content-Type/);
+ assert.match(server,/Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS/);
 });
 
 test('cloud file transfer routes store private owner-scoped files and enforce per-file and account quotas',()=>{
