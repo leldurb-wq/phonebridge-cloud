@@ -122,25 +122,31 @@ async function receiveTransfer({transfer,downloadChunk,complete,baseDir}){
       }else fd=fs.openSync(temp,'wx',0o600);
 
       const firstChunk=written===size?chunkCount:Math.floor(written/chunkSize);
-      for(let index=firstChunk;index<chunkCount;index++){
-        const meta=transfer.chunks[index];
-        const expected=index===chunkCount-1?size-index*chunkSize:chunkSize;
-        let bytes=null,lastError=null;
-        for(let attempt=0;attempt<3;attempt++){
-          try{bytes=await downloadChunk(transfer.id,index);lastError=null;break}
-          catch(error){lastError=error;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)))}
+      for(let batchStart=firstChunk;batchStart<chunkCount;batchStart+=3){
+        const batchIndexes=Array.from({length:Math.min(3,chunkCount-batchStart)},(_,offset)=>batchStart+offset);
+        const batch=await Promise.allSettled(batchIndexes.map(async index=>{
+          const meta=transfer.chunks[index],expected=index===chunkCount-1?size-index*chunkSize:chunkSize;
+          let bytes=null,lastError=null;
+          for(let attempt=0;attempt<3;attempt++){
+            try{bytes=await downloadChunk(transfer.id,index);lastError=null;break}
+            catch(error){lastError=error;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)))}
+          }
+          if(lastError){
+            if([400,404,409,413,422].includes(lastError.statusCode))throw lastError;
+            lastError.retryable=true;throw lastError;
+          }
+          if(!Buffer.isBuffer(bytes)||bytes.length!==expected)throw new Error('A file chunk was incomplete.');
+          const actual=crypto.createHash('sha256').update(bytes).digest('hex');
+          if(actual!==meta.sha256)throw new Error('A file chunk failed its integrity check.');
+          return {index,bytes};
+        }));
+        for(const result of batch){
+          if(result.status==='rejected')throw result.reason;
+          const part=result.value;
+          let offset=0;
+          while(offset<part.bytes.length)offset+=fs.writeSync(fd,part.bytes,offset,part.bytes.length-offset,written+offset);
+          written+=part.bytes.length;
         }
-        if(lastError){
-          if([400,404,409,413,422].includes(lastError.statusCode))throw lastError;
-          lastError.retryable=true;
-          throw lastError;
-        }
-        if(!Buffer.isBuffer(bytes)||bytes.length!==expected)throw new Error('A file chunk was incomplete.');
-        const actual=crypto.createHash('sha256').update(bytes).digest('hex');
-        if(actual!==meta.sha256)throw new Error('A file chunk failed its integrity check.');
-        let offset=0;
-        while(offset<bytes.length)offset+=fs.writeSync(fd,bytes,offset,bytes.length-offset,written+offset);
-        written+=bytes.length;
         fs.fsyncSync(fd);
       }
       if(written!==size)throw new Error('The received file size does not match the upload.');

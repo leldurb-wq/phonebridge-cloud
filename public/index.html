@@ -880,6 +880,85 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
 }
 @media(max-width:360px){.welcome-feature-grid{gap:7px}.welcome-feature{padding:11px;min-height:140px}.welcome-feature b{font-size:11px}.welcome-feature small{font-size:9px}}
 </style>
+<style>
+/* PHONEBRIDGE 4.0 — PHONE-FIRST INTERFACE */
+.mobile-tabbar{display:none}
+@media(max-width:760px){
+ body{padding-bottom:calc(82px + env(safe-area-inset-bottom))}
+ body .shell{width:100%;max-width:none;padding:0 15px calc(104px + env(safe-area-inset-bottom))}
+ body .topbar{position:sticky;top:0;z-index:40;margin:0 -15px;padding:11px 16px;background:color-mix(in srgb,var(--page-bg,#f5f8fb) 92%,transparent);backdrop-filter:blur(20px);border-bottom:1px solid var(--page-line,#dce5ec)}
+ body .brand{gap:10px}
+ body .brand strong{font-size:16px;letter-spacing:-.4px}
+ body .brand small{font-size:8px;letter-spacing:1.5px}
+ body .logo{width:37px;height:37px;border-radius:12px;font-size:18px}
+ body .top-actions{gap:6px}
+ body .top-actions .status{font-size:9px;padding:6px 9px}
+ body .top-actions .role{display:none}
+ body .nav{display:none!important}
+ body .mobile-tabbar{position:fixed;z-index:80;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:color-mix(in srgb,#fff 92%,transparent);border-top:1px solid #dce5ec;box-shadow:0 -10px 30px #1c354512;backdrop-filter:blur(22px)}
+ html:not([data-theme="light"]) .mobile-tabbar{background:color-mix(in srgb,#111d2d 94%,transparent);border-top-color:#31435a;box-shadow:0 -10px 30px #0005}
+ body .mobile-tabbar a{min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:13px;color:#718293;text-decoration:none}
+ body .mobile-tabbar a span{font-size:20px;line-height:1.2;font-weight:700}
+ body .mobile-tabbar a small{font-size:10px;font-weight:650;letter-spacing:.1px}
+ body .mobile-tabbar a[aria-current="page"]{color:var(--page-accent,#3979c8);background:var(--page-soft,#edf4fb)}
+ html:not([data-theme="light"]) body .mobile-tabbar a{color:#a7b6c9}
+ html:not([data-theme="light"]) body .mobile-tabbar a[aria-current="page"]{color:#b9d8ff;background:#243b5b}
+ body .hero{padding:27px 2px 18px}
+ body .hero h1{font-size:clamp(34px,9vw,44px);letter-spacing:-2.1px;line-height:1.02}
+ body .hero p{font-size:13px;line-height:1.65}
+ body .welcome-page{padding-top:14px}
+ body .welcome-topline{align-items:center;gap:8px}
+ body .welcome-hero{display:flex;flex-direction:column;gap:18px;padding:20px 0 22px}
+ body .welcome-copy{width:100%;max-width:none}
+ body .welcome-copy h1{font-size:clamp(35px,10vw,47px);line-height:1.02;letter-spacing:-2.2px}
+ body .welcome-copy p{font-size:13px;line-height:1.65;max-width:42ch}
+ body .welcome-visual{width:100%;max-width:340px;min-height:205px;margin:0 auto;transform:scale(.88);transform-origin:center}
+ body .welcome-cta{width:100%;min-height:49px;border-radius:14px}
+ body .welcome-feature-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin:12px 0}
+ body .welcome-feature-heading h2{font-size:20px;letter-spacing:-.7px}
+ body .welcome-feature-heading>p{font-size:10px;max-width:110px;text-align:right}
+ body .welcome-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ body .welcome-feature{min-height:128px;padding:13px;border-radius:16px}
+ body .welcome-feature b{font-size:12px}
+ body .welcome-feature small{font-size:10px;line-height:1.45}
+ body .welcome-feature-icon{width:34px;height:34px;border-radius:11px;font-size:16px}
+ body .feature-open{font-size:9px;margin-top:8px}
+ body .welcome-bottom{font-size:8px;gap:8px;flex-wrap:wrap}
+ body .phonebridge-workspace{margin-top:8px}
+ body .connection-banner{border-radius:14px;padding:13px}
+ body #workspace>.card{margin-bottom:12px!important}
+ body #transfer{padding:17px;border-radius:19px}
+ body #transfer .card-head{align-items:center}
+ body #transfer .card-head h2{font-size:19px;letter-spacing:-.6px}
+ body #transfer .pill{font-size:8px;letter-spacing:.6px;padding:5px 7px}
+ body #transfer .sub{font-size:12px;line-height:1.6}
+ body #pcDeviceSelect{min-height:50px;border-radius:13px;font-size:14px;font-weight:650}
+ body #pcDrop{padding:25px 14px;border-radius:17px}
+ body #pcDrop .drop-icon{font-size:34px}
+ body #pcDrop>b{font-size:14px}
+ body #pcDrop p{font-size:10px;line-height:1.5}
+ body #pcDrop .btn{width:100%;min-height:48px;border-radius:13px}
+ body #pcFileInput{display:none}
+ body #transfer .queue-item{padding:10px 0;border-bottom:1px solid var(--page-line);font-size:11px}
+ body #transfer .toolbar{align-items:center}
+ body #transferHistory .file{border-radius:13px}
+ body .a11y-bar{margin:10px 0 15px}
+ body .card{border-radius:17px}
+ body .btn{min-height:45px;border-radius:12px}
+ body .field{min-height:47px;border-radius:12px;font-size:14px}
+ body .file{border-radius:13px}
+ body .file-actions button{min-height:36px}
+ body .footer{padding-bottom:14px}
+}
+@media(max-width:390px){
+ body .shell{padding-left:12px;padding-right:12px}
+ body .topbar{margin-left:-12px;margin-right:-12px;padding-inline:13px}
+ body .top-actions .status{font-size:8px}
+ body .welcome-feature-grid{gap:7px}
+ body .welcome-feature{padding:11px;min-height:124px}
+ body #transfer .card-head{align-items:flex-start}
+}
+</style>
 </head>
 <body data-page="overview"><section id="accountGate" aria-labelledby="accountGateTitle"><div class="account-auth-card"><div class="account-auth-brand"><div class="account-auth-mark">PB</div><div><b>Phone Bridge</b><small>YOUR PRIVATE ACCOUNT</small></div></div><h1 id="accountGateTitle">Welcome to Phone Bridge</h1><p id="authDescription">Sign in to open your Phone Bridge workspace.</p><form id="accountLoginForm"><label for="accountLoginEmail">Email address</label><input id="accountLoginEmail" type="email" autocomplete="username" required placeholder="you@example.com"><label for="accountLoginPassword">Password</label><input id="accountLoginPassword" type="password" autocomplete="current-password" required placeholder="Your password"><button id="accountLoginButton" type="submit">Sign in</button></form><form id="accountRegisterForm" hidden><label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" required placeholder="you@example.com"><label for="registerPassword">Password</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"><button id="registerButton" type="submit">Create account</button></form><form id="accountRecoveryForm" hidden><label for="recoveryEmail">Email address</label><input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"><button id="recoveryButton" type="submit">Send password recovery email</button></form><form id="passwordUpdateForm" hidden><label for="recoveryPassword">New password</label><input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required><button type="submit">Update password</button></form><form id="phoneAuthForm" hidden><label for="accountPhone">Phone number</label><input id="accountPhone" type="tel" autocomplete="tel" placeholder="+1 555 010 1234" required><label for="phoneOtp" id="phoneOtpLabel" hidden>Verification code</label><input id="phoneOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="SMS code" hidden><button id="phoneAuthButton" type="submit">Send sign-in code</button></form><button class="account-auth-link" id="googleAuthButton" type="button">Continue with Google</button><div id="accountAuthMessage" class="account-auth-message" role="status" aria-live="polite">Checking account service?</div><div class="account-auth-links"><button class="account-auth-link" type="button" data-auth-view="login">Sign in</button><button class="account-auth-link" type="button" data-auth-view="register">Create account</button><button class="account-auth-link" type="button" data-auth-view="recovery">Forgot password?</button><button class="account-auth-link" type="button" data-auth-view="phone">Use phone</button></div></div></section><div class="launch-screen" id="launchScreen" aria-hidden="true"><div class="launch-symbol"><svg viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="M17 51C25 17 75 17 83 51" stroke="#78DDF2" stroke-width="6" stroke-linecap="round"/><path d="M17 51V78M83 51V78M10 80H90" stroke="#4B9DFA" stroke-width="5" stroke-linecap="round"/><circle cx="17" cy="51" r="6" fill="#D9F7FF"/><circle cx="50" cy="26" r="6" fill="#D9F7FF"/><circle cx="83" cy="51" r="6" fill="#D9F7FF"/></svg></div><strong>Phone Bridge</strong><span>Your devices. Your private workspace.</span><div class="launch-progress"></div></div><a class="skip-link" href="#mainContent">Skip to main content</a><main class="shell" id="mainContent">
 <header class="topbar">
@@ -899,6 +978,7 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
  <span class="nav-group-label">MORE</span>
  <a href="#help" data-page-link="help">Help & privacy</a><a href="#setup" id="setupNav" data-page-link="setup">Setup</a><a href="#security" id="securityNav" data-page-link="security">Security</a>
 </nav>
+<nav class="mobile-tabbar" aria-label="Phone navigation"><a href="#welcome" data-page-link="welcome"><span aria-hidden="true">⌂</span><small>Home</small></a><a href="#transfer" data-page-link="transfer"><span aria-hidden="true">⇄</span><small>Transfer</small></a><a href="#library" data-page-link="library"><span aria-hidden="true">▤</span><small>Drive</small></a><a href="#computer" data-page-link="computer"><span aria-hidden="true">▣</span><small>Computer</small></a><a href="#help" data-page-link="help"><span aria-hidden="true">•••</span><small>More</small></a></nav>
 <section id="welcomePage" class="welcome-page hidden" aria-labelledby="welcomeTitle">
  <div class="welcome-topline"><span class="eyebrow">YOUR DEVICES, IN ONE PLACE</span><span class="welcome-secure"><i></i> PRIVATE WORKSPACE</span></div>
  <div class="welcome-hero">
@@ -991,10 +1071,11 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
 <section class="card" style="margin:0 0 16px"><div class="card-head"><h2>PhoneBridge account</h2><span class="pill">Signed in</span></div><p class="sub" id="connectedAs">Pair a computer to check its connection status.</p><div class="actions"><button class="btn quiet" id="disconnect">Disconnect this phone</button><button class="btn quiet" id="workspaceRefresh">Refresh workspace</button></div></section>
  <div class="layout">
   <div class="maincol">
-   <section class="card" id="transfer"><div class="card-head"><h2>Send files to your ThinkPad</h2><span class="pill">Up to 2 GB per file</span></div><p class="sub">Send photos, videos, documents and large files directly to your paired computer. PhoneBridge transfers in secure 8 MB chunks and saves completed files in Documents\\PhoneBridge\\Incoming on the ThinkPad.</p>
-    <label class="notice" for="pcDeviceSelect">Choose your paired computer</label><select class="field" id="pcDeviceSelect" aria-label="Choose paired computer" style="margin:8px 0 14px"><option value="">Loading paired computers…</option></select>
-    <div class="drop" id="pcDrop"><div class="drop-icon">↑</div><b>Choose files to send to your computer</b><p>Large files supported · resumable chunk upload · integrity checked</p><label class="btn secondary" for="pcFileInput">Choose files</label><input id="pcFileInput" type="file" multiple><div class="message" id="pcTransferMsg" role="status"></div><div class="progress hidden" id="pcTransferProgress"><span id="pcTransferBar"></span></div></div>
+   <section class="card" id="transfer"><div class="card-head"><h2 id="transferHeading">Send files</h2><span class="pill">Up to 2 GB per file</span></div><p class="sub" id="transferDescription">PhoneBridge sends files securely in verified chunks and confirms delivery on the receiving device.</p>
+    <label class="notice" id="pcDeviceLabel" for="pcDeviceSelect">Choose your paired ThinkPad</label><select class="field" id="pcDeviceSelect" aria-label="Choose transfer destination" style="margin:8px 0 14px"><option value="">Loading devices…</option></select>
+    <div class="drop" id="pcDrop"><div class="drop-icon">↑</div><b id="transferDropTitle">Choose files to send</b><p>Large files supported · parallel resumable transfer · integrity checked</p><label class="btn secondary" for="pcFileInput">Choose files</label><input id="pcFileInput" type="file" multiple><div class="message" id="pcTransferMsg" role="status"></div><div class="progress hidden" id="pcTransferProgress"><span id="pcTransferBar"></span></div></div>
     <div class="queue" id="pcTransferQueue"></div>
+    <div class="toolbar" style="margin-top:18px"><b>Transfer history & received files</b><button class="btn quiet" id="refreshTransferHistory" type="button">Refresh</button></div><div class="filelist" id="transferHistory"><div class="empty">Loading transfer history…</div></div>
    </section>
    <section class="card" id="cloudUpload"><div class="card-head"><h2>Upload to PhoneBridge Drive</h2><span class="pill">Cloud storage · 250 MB per file</span></div><p class="sub">Store a copy in your private cloud Drive so it is available on your other signed-in devices.</p>
     <div class="drop" id="drop"><div class="drop-icon">☁</div><b>Drop files here or browse</b><p>Private cloud Drive upload</p><label class="btn secondary" for="fileInput">Choose files</label><input id="fileInput" type="file" multiple><div class="message" id="uploadMsg" role="status"></div><div class="progress hidden" id="uploadProgress"><span id="uploadBar"></span></div></div>
@@ -1020,7 +1101,7 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-let info=null,legacyToken='',pendingId=null,isHost=false,pollTimer=null,toastTimer=null,heartbeatTimer=null,heartbeatBusy=false,heartbeatDelay=20000,deviceRefreshTimer=null,hostMonitorTimer=null,deferredInstallPrompt=null,accountSupabase=null,accountSession=null,accountStarted=false;
+let info=null,legacyToken='',pendingId=null,isHost=false,pollTimer=null,toastTimer=null,heartbeatTimer=null,heartbeatBusy=false,heartbeatDelay=20000,deviceRefreshTimer=null,hostMonitorTimer=null,deferredInstallPrompt=null,accountSupabase=null,accountSession=null,accountStarted=false,phoneClient=false,transferClientId='',transferClientTimer=null,transferInboxTimer=null,transferHistoryTimer=null,transferPhones=[],transferHistoryItems=[];const activePhoneTransfers=new Set(),transferObjectUrls=new Map();
 const say=(id,s)=>{const e=$(id);if(e)e.textContent=s};
 function setBridgeStatus(label){const e=$('status');if(e)e.innerHTML='<i class="dot"></i> '+label}
 function setConnectionState(state,title,detail){const b=$('connectionBanner');if(!b)return;if(state==='online'){b.hidden=true;b.dataset.state='online';return}b.hidden=false;b.dataset.state=state;$('connectionTitle').textContent=title;$('connectionDetail').textContent=detail;$('connectionRetry').textContent=state==='session-expired'?'Open pairing':'Try again'}
@@ -1030,7 +1111,7 @@ function toast(s){say('toast',s);$('toast').classList.add('show');clearTimeout(t
 function headers(extra){const h=new Headers(extra||{});if(accountSession?.access_token)h.set('Authorization','Bearer '+accountSession.access_token);return h}
 async function api(url,opt={}) {
  const method=(opt.method||'GET').toUpperCase(),pathOnly=url.split('?')[0];
- const safe=(pathOnly==='/api/transfers'&&method==='POST')||(pathOnly.startsWith('/api/transfers/')&&['PUT','POST','GET','DELETE'].includes(method))||(pathOnly==='/api/devices'&&method==='GET')||(/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method))||(pathOnly==='/api/enrollments'&&method==='POST')||(pathOnly==='/api/enrollments/approve'&&method==='POST')||(pathOnly==='/api/files'&&['GET','PATCH','DELETE'].includes(method))||(pathOnly==='/api/upload'&&method==='POST')||(pathOnly==='/api/download'&&method==='GET');
+ const safe=(pathOnly==='/api/transfers'&&['GET','POST'].includes(method))||(pathOnly.startsWith('/api/transfers/')&&['PUT','POST','GET','DELETE'].includes(method))||(pathOnly==='/api/transfer-clients'&&method==='GET')||(pathOnly.startsWith('/api/transfer-clients/')&&['POST','GET'].includes(method))||(pathOnly==='/api/devices'&&method==='GET')||(/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method))||(pathOnly==='/api/enrollments'&&method==='POST')||(pathOnly==='/api/enrollments/approve'&&method==='POST')||(pathOnly==='/api/files'&&['GET','PATCH','DELETE'].includes(method))||(pathOnly==='/api/upload'&&method==='POST')||(pathOnly==='/api/download'&&method==='GET');
  if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');
  const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};
  try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}
@@ -1069,12 +1150,12 @@ $('passwordUpdateForm').addEventListener('submit',async event=>{event.preventDef
 async function init(){
   info=null;isHost=false;
   $('workspace').classList.remove('hidden');$('pairScreen').classList.remove('hidden');
-  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');const phoneClient=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);$('computerPairControls').classList.toggle('hidden',phoneClient);$('phonePairControls').classList.toggle('hidden',!phoneClient);
+  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');phoneClient=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);$('computerPairControls').classList.toggle('hidden',phoneClient);$('phonePairControls').classList.toggle('hidden',!phoneClient);
   $('deviceRole').textContent='PhoneBridge account';setBridgeStatus('Cloud online');setConnectionState('online');
   $('cloudStageNotice').hidden=false;$('setupOverall').textContent='Cloud connection';
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
-  const initialDevices=await loadDevices();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);
+  const initialDevices=await loadDevices();await ensureTransferClient();if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,20000);if(!transferClientTimer)transferClientTimer=setInterval(heartbeatTransferClient,20000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden)loadTransferHistory()},10000);await loadTransferHistory();if(phoneClient)await pollPhoneInbox();
   const requested=location.hash.slice(1);showPage(pageNames.includes(requested)?requested:(phoneClient?'welcome':initialDevices?.length?'overview':'welcome'))
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
@@ -1189,9 +1270,34 @@ function stopSystemAudio(){audioRunning=false;window.phoneBridgeAudioRunning=fal
 systemAudioPlayer.addEventListener('playing',()=>{window.phoneBridgeAudioRunning=true;const audioToggle=document.querySelector('#screenFrame .screen-audio');if(audioToggle)audioToggle.textContent='Stop game sound';say('audioStatus','Playing ThinkPad system audio on this iPhone.')});
 systemAudioPlayer.addEventListener('waiting',()=>say('audioStatus','Buffering ThinkPad audio'));
 systemAudioPlayer.addEventListener('error',()=>{if(audioRunning)say('audioStatus','Safari could not decode the audio stream.');});
-$('audioStreamButton').onclick=()=>{if(audioRunning||systemAudioPlayer.src)stopSystemAudio();else startSystemAudio()};async function loadDevices(){
+$('audioStreamButton').onclick=()=>{if(audioRunning||systemAudioPlayer.src)stopSystemAudio();else startSystemAudio()};
+function transferClientLabel(){
+ const ua=navigator.userAgent;
+ if(/iPhone/i.test(ua))return 'This iPhone';
+ if(/iPad/i.test(ua))return 'This iPad';
+ if(/Android/i.test(ua))return 'This Android phone';
+ if(/Windows/i.test(ua))return 'This ThinkPad';
+ if(/Macintosh|Mac OS/i.test(ua))return 'This Mac';
+ return phoneClient?'This phone':'This computer';
+}
+async function ensureTransferClient(){
  try{
-  const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;renderPcDeviceChoices();
+  try{transferClientId=localStorage.getItem('phonebridge-transfer-client-id')||''}catch{}
+  if(!/^[0-9a-f-]{36}$/i.test(transferClientId)){transferClientId=crypto.randomUUID();try{localStorage.setItem('phonebridge-transfer-client-id',transferClientId)}catch{}}
+  await api('/api/transfer-clients/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:transferClientId,deviceType:phoneClient?'phone':'computer',label:transferClientLabel()})});
+  await loadTransferPhones();
+ }catch(error){say('pcTransferMsg','Device registration: '+error.message)}
+}
+async function heartbeatTransferClient(){
+ if(!transferClientId||!accountStarted)return;
+ try{await api('/api/transfer-clients/heartbeat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:transferClientId})});if(!phoneClient)await loadTransferPhones()}catch{}
+}
+async function loadTransferPhones(){
+ try{const data=await api('/api/transfer-clients');transferPhones=data.phones||[];renderPcDeviceChoices();return transferPhones}catch(error){transferPhones=[];renderPcDeviceChoices();return []}
+}
+async function loadDevices(){
+ try{
+  const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;await loadTransferPhones();renderPcDeviceChoices();
   say('deviceCount',items.length+' paired computer'+(items.length===1?'':'s'));
   $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Background connector has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Tap Pair this computer, then enter the code on your phone and tap Connect.</div>';
   const online=items.filter(x=>x.connected).length;
@@ -1202,9 +1308,25 @@ $('audioStreamButton').onclick=()=>{if(audioRunning||systemAudioPlayer.src)stopS
 function renderPcDeviceChoices(){
  const select=$('pcDeviceSelect');if(!select)return;
  const previous=select.value;
- const options=pcPairedDevices.map(device=>'<option value="'+esc(device.id)+'" '+(device.connected?'':'disabled')+'>'+esc(device.name)+' — '+(device.connected?'Online':'Offline')+'</option>').join('');
- select.innerHTML='<option value="">'+(pcPairedDevices.length?'Choose an online computer':'No paired computer yet')+'</option>'+options;
- if(previous&&pcPairedDevices.some(device=>device.id===previous&&device.connected))select.value=previous;
+ if(phoneClient){
+  $('transferHeading').textContent='Send files to your ThinkPad';
+  $('transferDescription').textContent='Choose your paired ThinkPad. Files arrive in its Incoming folder and appear in this transfer history.';
+  $('pcDeviceLabel').textContent='Choose your paired ThinkPad';
+  $('transferDropTitle').textContent='Choose files to send to your ThinkPad';
+  select.setAttribute('aria-label','Choose paired ThinkPad');
+  const options=pcPairedDevices.map(device=>'<option value="'+esc(device.id)+'" '+(device.connected?'':'disabled')+'>'+esc(device.name)+' — '+(device.connected?'Online':'Offline')+'</option>').join('');
+  select.innerHTML='<option value="">'+(pcPairedDevices.length?'Choose an online ThinkPad':'No paired ThinkPad yet')+'</option>'+options;
+  if(previous&&pcPairedDevices.some(device=>device.id===previous&&device.connected))select.value=previous;
+ }else{
+  $('transferHeading').textContent='Send files to your phone';
+  $('transferDescription').textContent='Choose the phone currently open in PhoneBridge. The file will arrive in that phone’s inbox.';
+  $('pcDeviceLabel').textContent='Choose the current phone';
+  $('transferDropTitle').textContent='Choose files to send to your phone';
+  select.setAttribute('aria-label','Choose current phone');
+  const options=transferPhones.map(device=>'<option value="'+esc(device.id)+'" '+(device.connected?'':'disabled')+'>'+esc(device.label)+' — '+(device.connected?'Online':'Offline')+'</option>').join('');
+  select.innerHTML='<option value="">'+(transferPhones.some(x=>x.connected)?'Choose the current phone':'Open PhoneBridge on your phone first')+'</option>'+options;
+  if(previous&&transferPhones.some(device=>device.id===previous&&device.connected))select.value=previous;
+ }
 }
 $('legacyRefreshDevices').onclick=loadDevices;
 
@@ -1293,6 +1415,23 @@ async function hashChunk(blob){
  const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
  return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
+async function uploadTransferChunks(transferId,transfer,file,onChunk){
+ let next=0;
+ async function worker(){
+  while(true){
+   const index=next++;if(index>=transfer.chunkCount)return;
+   const start=index*transfer.chunkSize,end=Math.min(file.size,start+transfer.chunkSize),chunk=file.slice(start,end),digest=await hashChunk(chunk);
+   let error=null;
+   for(let attempt=0;attempt<3;attempt++){
+    try{await api('/api/transfers/'+transferId+'/chunks/'+index,{method:'PUT',headers:{'Content-Type':'application/octet-stream','X-Chunk-SHA256':digest},body:chunk});error=null;break}
+    catch(problem){error=problem;if(attempt<2)await pause(400*(attempt+1))}
+   }
+   if(error)throw error;
+   onChunk(chunk.size,end,index);
+  }
+ }
+ await Promise.all(Array.from({length:Math.min(3,transfer.chunkCount)},worker));
+}
 async function sendFilesToPc(fileList){
  const files=[...fileList];if(!files.length)return;
  await freshAccountToken();
@@ -1314,18 +1453,7 @@ async function sendFilesToPc(fileList){
    row.lastElementChild.textContent='Starting secure transfer…';
    const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId,name:file.name,size:file.size,type:file.type||'application/octet-stream'})});
    const transfer=startedTransfer.transfer;transferId=transfer.id;
-   for(let index=0;index<transfer.chunkCount;index++){
-    const start=index*transfer.chunkSize,end=Math.min(file.size,start+transfer.chunkSize),chunk=file.slice(start,end),digest=await hashChunk(chunk);
-    let error=null;
-    for(let attempt=0;attempt<3;attempt++){
-     try{
-      await api('/api/transfers/'+transferId+'/chunks/'+index,{method:'PUT',headers:{'Content-Type':'application/octet-stream','X-Chunk-SHA256':digest},body:chunk});
-      error=null;break;
-     }catch(problem){error=problem;if(attempt<2)await pause(600*(attempt+1))}
-    }
-    if(error)throw error;
-    sent+=chunk.size;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update();
-   }
+   await uploadTransferChunks(transferId,transfer,file,(bytes,end)=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update()});
    try{await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(error){const state=await api('/api/transfers/'+transferId);if(!['queued','receiving'].includes(state.transfer.status))throw error}
    row.lastElementChild.textContent='Uploaded to secure relay · waiting for ThinkPad receipt…';
    say('pcTransferMsg','Phone upload complete. Waiting for the ThinkPad to verify and save '+file.name+'.');
@@ -1350,14 +1478,138 @@ async function sendFilesToPc(fileList){
    failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message;complete++;update();
   }
  }
- say('pcTransferMsg',failed.length?(files.length-failed.length)+' uploaded · '+failed.join(' · '):pending.length?pending.length+' file(s) uploaded securely but still awaiting ThinkPad confirmation: '+pending.join(', '):'All '+files.length+' file(s) delivered and verified on '+device.name+'.');
+ await loadTransferHistory();say('pcTransferMsg',failed.length?(files.length-failed.length)+' uploaded · '+failed.join(' · '):pending.length?pending.length+' file(s) uploaded securely but still awaiting ThinkPad confirmation: '+pending.join(', '):'All '+files.length+' file(s) delivered and verified on '+device.name+'.');
  toast(failed.length?'Some PC transfers need attention':pending.length?'Files uploaded · delivery pending':'Files delivered to ThinkPad');
 }
-$('pcFileInput').addEventListener('change',event=>{sendFilesToPc(event.target.files).catch(error=>say('pcTransferMsg',error.message));event.target.value=''});
+async function sendFilesToPhone(fileList){
+ const files=[...fileList];if(!files.length)return;
+ await freshAccountToken();
+ const targetClientId=$('pcDeviceSelect').value;
+ const target=transferPhones.find(x=>x.id===targetClientId&&x.connected);
+ if(!target){say('pcTransferMsg','Choose the current phone. Open PhoneBridge on the phone and keep it online.');return}
+ const computer=pcPairedDevices.find(x=>x.connected);
+ if(!computer){say('pcTransferMsg','The ThinkPad connector is offline. Reconnect it before sending to your phone.');return}
+ const invalid=files.find(f=>!f.size||f.size>2*1024*1024*1024);
+ if(invalid){say('pcTransferMsg',invalid.size?'Choose files up to 2 GB.':' '+invalid.name+' is empty.');return}
+ const total=files.reduce((sum,f)=>sum+f.size,0),started=Date.now();let sent=0,done=0;const failed=[];
+ $('pcTransferProgress').classList.remove('hidden');$('pcTransferBar').style.width='0%';
+ $('pcTransferQueue').innerHTML=files.map((f,i)=>'<div class="queue-item" id="pc-transfer-'+i+'"><span>'+esc(f.name)+'</span><span>Waiting · '+size(f.size)+'</span></div>').join('');
+ const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Sending to '+target.label+' · '+pct+'% · '+size(rate)+'/s · '+eta+'s remaining')};
+ for(let i=0;i<files.length;i++){
+  const file=files[i],row=$('pc-transfer-'+i);let transferId='';
+  try{
+   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:'pc_to_phone',targetClientId,deviceId:computer.id,name:file.name,size:file.size,type:file.type||'application/octet-stream'})});
+   const transfer=startedTransfer.transfer;transferId=transfer.id;
+   await uploadTransferChunks(transferId,transfer,file,bytes=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(sent/Math.max(1,total)*100)+'%';update()});
+   await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   row.lastElementChild.textContent='Uploaded · waiting for '+target.label+' to receive…';
+   let status='queued';
+   for(let check=0;check<450;check++){
+    await pause(3000);
+    const result=await api('/api/transfers/'+transferId),item=result.transfer;status=item.status;
+    if(status==='completed')break;
+    if(status==='failed')throw Error(item.error||'The phone could not receive this file.');
+    row.lastElementChild.textContent=status==='receiving'?'Phone is downloading and verifying…':'Waiting for '+target.label+' to come online…';
+   }
+   if(status!=='completed')throw Error('Upload finished, but the phone has not confirmed delivery yet.');
+   row.lastElementChild.textContent='Delivered to '+target.label+' · '+size(file.size);done++;update();
+  }catch(error){failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message}
+ }
+ await loadTransferHistory();
+ say('pcTransferMsg',failed.length?done+' delivered · '+failed.join(' · '):'All '+done+' file(s) delivered to '+target.label+'.');
+ toast(failed.length?'Some phone transfers need attention':'Files delivered to your phone');
+}
+function sendFilesFromThisDevice(fileList){return phoneClient?sendFilesToPc(fileList):sendFilesToPhone(fileList)}
+$('pcFileInput').addEventListener('change',event=>{sendFilesFromThisDevice(event.target.files).catch(error=>say('pcTransferMsg',error.message));event.target.value=''});
 const pcDrop=$('pcDrop');
 ['dragenter','dragover'].forEach(name=>pcDrop.addEventListener(name,event=>{event.preventDefault();pcDrop.classList.add('over')}));
 ['dragleave','drop'].forEach(name=>pcDrop.addEventListener(name,event=>{event.preventDefault();pcDrop.classList.remove('over')}));
-pcDrop.addEventListener('drop',event=>sendFilesToPc(event.dataTransfer.files).catch(error=>say('pcTransferMsg',error.message)));
+pcDrop.addEventListener('drop',event=>sendFilesFromThisDevice(event.dataTransfer.files).catch(error=>say('pcTransferMsg',error.message)));
+async function fetchTransferBlob(item,clientId=''){
+ const getChunk=async index=>{
+  const suffix=clientId?'?clientId='+encodeURIComponent(clientId):'';
+  const response=await fetch('/api/transfers/'+encodeURIComponent(item.id)+'/chunks/'+index+suffix,{headers:headers(),credentials:'same-origin',cache:'no-store'});
+  if(!response.ok){let data={};try{data=await response.json()}catch{}const error=Error(data.error||'Could not download file chunk '+(index+1));error.retryable=[408,425,429,500,502,503,504].includes(response.status);throw error}
+  const bytes=await response.arrayBuffer(),expected=response.headers.get('X-Chunk-SHA256');
+  if(expected&&await hashChunk(new Blob([bytes]))!==expected)throw Error('File chunk '+(index+1)+' failed integrity verification.');
+  return bytes;
+ };
+ if(navigator.storage&&typeof navigator.storage.getDirectory==='function'){
+  let writable=null;
+  try{
+   const root=await navigator.storage.getDirectory(),folder=await root.getDirectoryHandle('PhoneBridgeReceived',{create:true});
+   const safeName=item.name.replace(/[<>:"/\\|?*\\x00-\\x1f]/g,'_').slice(0,120)||'received-file';
+   const handle=await folder.getFileHandle(item.id+'-'+safeName,{create:true});
+   writable=await handle.createWritable();
+   for(let start=0;start<item.chunkCount;start+=3){
+    const batch=await Promise.all(Array.from({length:Math.min(3,item.chunkCount-start)},(_,offset)=>getChunk(start+offset)));
+    for(const bytes of batch)await writable.write(bytes);
+   }
+   await writable.close();return await handle.getFile();
+  }catch(error){
+   if(writable)try{await writable.abort()}catch{}
+   throw Error('PhoneBridge could not save this file in browser storage: '+error.message);
+  }
+ }
+ const parts=new Array(item.chunkCount);let next=0;
+ async function worker(){while(true){const index=next++;if(index>=item.chunkCount)return;parts[index]=await getChunk(index)}}
+ await Promise.all(Array.from({length:Math.min(3,item.chunkCount)},worker));
+ return new Blob(parts,{type:item.type||'application/octet-stream'});
+}
+function downloadTransferBlob(blob,name){
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name||'PhoneBridge-file';document.body.appendChild(a);a.click();a.remove();
+ const old=transferObjectUrls.get('download-temp');if(old)URL.revokeObjectURL(old);transferObjectUrls.set('download-temp',url);
+}
+async function receivePhoneTransfer(item){
+ if(activePhoneTransfers.has(item.id))return;activePhoneTransfers.add(item.id);
+ try{
+  await api('/api/transfers/'+item.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:transferClientId,status:'receiving'})});
+  say('pcTransferMsg','Receiving '+item.name+' · '+size(item.size)+'…');
+  const blob=await fetchTransferBlob(item,transferClientId),url=URL.createObjectURL(blob);
+  const previous=transferObjectUrls.get(item.id);if(previous)URL.revokeObjectURL(previous);transferObjectUrls.set(item.id,url);
+  await api('/api/transfers/'+item.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:transferClientId,status:'completed'})});
+  say('pcTransferMsg','Received and verified '+item.name+'. Use Transfer history to open it again.');
+  toast('Received '+item.name);await loadTransferHistory();
+ }catch(error){
+  const retryable=!!error.retryable||/network|fetch|timeout|connection/i.test(error.message||'');
+  try{await api('/api/transfers/'+item.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:transferClientId,status:retryable?'queued':'failed',error:error.message})})}catch{}
+  say('pcTransferMsg',retryable?'Connection interrupted while receiving '+item.name+'. PhoneBridge will retry automatically.':'Could not receive '+item.name+': '+error.message);await loadTransferHistory();
+ }finally{activePhoneTransfers.delete(item.id)}
+}
+async function pollPhoneInbox(){
+ if(!phoneClient||!transferClientId||!accountStarted||document.hidden)return;
+ try{const data=await api('/api/transfers/inbox?clientId='+encodeURIComponent(transferClientId));for(const item of data.transfers||[])if(!activePhoneTransfers.has(item.id))receivePhoneTransfer(item).catch(()=>{})}catch{}
+}
+async function loadTransferHistory(){
+ try{const data=await api('/api/transfers');transferHistoryItems=data.transfers||[];renderTransferHistory()}catch(error){say('pcTransferMsg','Transfer history unavailable: '+error.message)}
+}
+function renderTransferHistory(){
+ const box=$('transferHistory');if(!box)return;
+ box.innerHTML=transferHistoryItems.length?transferHistoryItems.map(item=>{
+  const incoming=phoneClient?item.direction==='pc_to_phone':item.direction==='phone_to_pc';
+  const label=incoming?'Received':'Sent';
+  const status=item.status==='completed'?'Delivered':item.status==='failed'?'Failed':item.status==='cancelled'?'Cancelled':item.status==='receiving'?'Receiving':'In progress';
+  const available=item.status==='completed'&&item.completedAt&&Date.now()-Date.parse(item.completedAt)<24*60*60*1000;
+  return '<div class="file"><div class="file-icon">'+(fileKind(item.name)==='videos'?'VID':fileKind(item.name)==='images'?'IMG':'FILE')+'</div><div class="file-name"><b>'+esc(item.name)+'</b><small>'+label+' · '+size(item.size)+' · '+status+' · '+new Date(item.createdAt).toLocaleString()+'</small></div><div class="file-actions">'+(available?'<button type="button" data-transfer-open="'+esc(item.id)+'">Open / Save</button>':'')+'</div></div>';
+ }).join(''):'<div class="empty"><b>No transfers yet</b>Files sent or received through PhoneBridge will appear here.</div>';
+}
+async function openTransferFile(id){
+ const item=transferHistoryItems.find(x=>x.id===id);if(!item||item.status!=='completed')return;
+ try{
+  let url=transferObjectUrls.get(id);
+  if(!url){say('pcTransferMsg','Loading '+item.name+' for preview…');const blob=await fetchTransferBlob(item,item.direction==='pc_to_phone'?item.targetClientId:'');url=URL.createObjectURL(blob);transferObjectUrls.set(id,url)}
+  const stage=$('previewStage'),kind=fileKind(item.name);stage.replaceChildren();$('previewTitle').textContent=item.name;$('previewMeta').textContent=size(item.size)+' · Transfer copy retained for 24 hours';$('previewStatus').textContent='Opened from PhoneBridge transfer history';$('previewDownload').href=url;$('previewDownload').download=item.name;
+  let element;
+  if(kind==='images'&&!/\.heic$/i.test(item.name)){element=document.createElement('img');element.className='preview-image';element.alt=item.name;element.src=url}
+  else if(kind==='videos'){element=document.createElement('video');element.className='preview-video';element.controls=true;element.playsInline=true;element.src=url}
+  else if(kind==='audio'){element=document.createElement('audio');element.className='preview-audio';element.controls=true;element.src=url}
+  else if(/\.pdf$/i.test(item.name)){element=document.createElement('iframe');element.className='preview-document';element.title=item.name;element.src=url}
+  else{element=document.createElement('div');element.className='empty';element.textContent='Preview is not available for this file type. Use Download file.'}
+  stage.appendChild(element);$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open');
+ }catch(error){say('pcTransferMsg','Could not open '+item.name+': '+error.message)}
+}
+$('transferHistory').addEventListener('click',event=>{const button=event.target.closest('[data-transfer-open]');if(button)openTransferFile(button.dataset.transferOpen)});
+$('refreshTransferHistory').onclick=loadTransferHistory;
 
 async function upload(file,onProgress){
  const accountToken=await freshAccountToken();

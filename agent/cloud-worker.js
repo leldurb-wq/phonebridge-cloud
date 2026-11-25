@@ -36,6 +36,7 @@ function reportAgentEvent(event,error){
   }catch{}
 }
 const MAX_CLOUD_RESPONSE_BYTES = 1024 * 1024;
+const cloudHttpsAgent = new https.Agent({keepAlive:true,maxSockets:6,maxFreeSockets:3,timeout:60000});
 
 function secureCredentialPath(target, isDirectory) {
   if (process.platform === 'win32') {
@@ -56,7 +57,7 @@ function postJson(urlPath, body, token) {
     const url = new URL(urlPath, cloudUrl);
     if (url.protocol !== 'https:') return reject(new Error('Only HTTPS cloud endpoints are allowed.'));
     const payload = JSON.stringify(body);
-    const req = https.request(url,{method:'POST',headers:{
+    const req = https.request(url,{method:'POST',agent:cloudHttpsAgent,headers:{
       'content-type':'application/json',
       'content-length':Buffer.byteLength(payload),
       ...(token ? {authorization:'Bearer '+token} : {})
@@ -101,7 +102,7 @@ function getBinary(urlPath,token){
   return new Promise((resolve,reject)=>{
     const url=new URL(urlPath,cloudUrl);
     if(url.protocol!=='https:')return reject(new Error('Only HTTPS cloud endpoints are allowed.'));
-    const req=https.get(url,{headers:{authorization:'Bearer '+token}},res=>{
+    const req=https.get(url,{agent:cloudHttpsAgent,headers:{authorization:'Bearer '+token}},res=>{
       if(res.statusCode<200||res.statusCode>=300){
         const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>{let data={};try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{}const error=new Error(data.error||'Could not download a transfer chunk.');error.statusCode=res.statusCode;reject(error)});return;
       }
@@ -163,14 +164,13 @@ async function main() {
       const pending=await postJson('/api/agent/transfers/claim',{deviceId:current.deviceId},current.agentToken);
       if(pending?.transfer){
         const transfer=pending.transfer;
+        let chunksSinceHeartbeat=0;
         const received=await receiveTransfer({
           transfer,
           baseDir:path.join(os.homedir(),'Documents','PhoneBridge','Incoming'),
           downloadChunk:async(id,index)=>{
-            await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
-            const bytes=await getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
-            await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
-            return bytes;
+            if(chunksSinceHeartbeat++%3===0)await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+            return getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
           },
           complete:result=>postJson('/api/agent/transfers/'+encodeURIComponent(transfer.id)+'/complete',{deviceId:current.deviceId,...result},current.agentToken)
         });
