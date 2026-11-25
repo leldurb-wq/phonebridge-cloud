@@ -1,14 +1,12 @@
 'use strict';
 
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
-const http = require('node:http');
 const https = require('node:https');
-const readline = require('node:readline');
 const { execFile, execFileSync } = require('node:child_process');
 const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, tokenPattern } = require('./credential-store');
-const { redeemPairingCode } = require('./enrollment');
 const { runReconnectLoop } = require('./reconnect-loop');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
@@ -23,13 +21,9 @@ if (!parsedCloudUrl || parsedCloudUrl.protocol!=='https:' || !parsedCloudUrl.hos
 const credentialDir = process.env.PHONEBRIDGE_AGENT_CONFIG_DIR ||
   path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), '.phonebridge'), 'PhoneBridge', 'Agent');
 const credentialPath = path.join(credentialDir, 'cloud-device.json');
-const workspaceRoot = path.resolve(process.env.PHONEBRIDGE_WORKSPACE || path.join(os.homedir(), 'PhoneBridge'));
-fs.mkdirSync(workspaceRoot,{recursive:true});
 fs.mkdirSync(credentialDir,{recursive:true});
 if (fs.lstatSync(credentialDir).isSymbolicLink()) throw new Error('Agent credential directory must not be a symbolic link.');
-const canonicalWorkspaceRoot = fs.realpathSync(workspaceRoot);
 const MAX_CLOUD_RESPONSE_BYTES = 1024 * 1024;
-const allowedActions = new Set(['system_info','list_files','read_file','write_file','create_folder','launch_app']);
 
 function secureCredentialPath(target, isDirectory) {
   if (process.platform === 'win32') {
@@ -48,10 +42,9 @@ secureCredentialPath(credentialDir,true);
 function postJson(urlPath, body, token) {
   return new Promise((resolve,reject)=>{
     const url = new URL(urlPath, cloudUrl);
-    const client = url.protocol === 'https:' ? https : http;
     if (url.protocol !== 'https:') return reject(new Error('Only HTTPS cloud endpoints are allowed.'));
     const payload = JSON.stringify(body);
-    const req = client.request(url,{method:'POST',headers:{
+    const req = https.request(url,{method:'POST',headers:{
       'content-type':'application/json',
       'content-length':Buffer.byteLength(payload),
       ...(token ? {authorization:'Bearer '+token} : {})
@@ -92,109 +85,68 @@ function postJson(urlPath, body, token) {
   });
 }
 
-function safePath(relativePath) {
-  const segments = typeof relativePath === 'string' ? relativePath.split(/[\\/]+/) : [];
-  if (typeof relativePath !== 'string' || !relativePath.trim() || relativePath.length > 240 ||
-      path.isAbsolute(relativePath) || /^[a-z]:/i.test(relativePath) ||
-      segments.some(segment=>segment==='..'||(segment!=='.'&&segment.endsWith('.'))||segment.endsWith(' '))) throw new Error('Unsafe workspace path.');
-  const resolved = path.resolve(canonicalWorkspaceRoot, relativePath);
-  if (resolved !== canonicalWorkspaceRoot && !resolved.startsWith(canonicalWorkspaceRoot+path.sep)) throw new Error('Unsafe workspace path.');
-  let current=canonicalWorkspaceRoot;
-  const parts=path.relative(canonicalWorkspaceRoot,resolved).split(path.sep).filter(Boolean);
-  for (let index=0;index<parts.length;index++) {
-    current=path.join(current,parts[index]);
-    try {
-      const stat=fs.lstatSync(current);
-      if (stat.isSymbolicLink()) throw new Error('Symbolic links are not allowed inside the PhoneBridge workspace.');
-      if (index<parts.length-1 && !stat.isDirectory()) throw new Error('Workspace path parent is not a directory.');
-    } catch (error) {
-      if (error.code==='ENOENT') break;
-      throw error;
-    }
+function removeAgentPairingFiles(){
+  for(const name of fs.readdirSync(credentialDir)){
+    if(!/^pairing-code-[0-9a-f-]{36}\.txt$/i.test(name))continue;
+    try{fs.unlinkSync(path.join(credentialDir,name));}catch(_){}
   }
-  return resolved;
 }
-
-function askForCode(prompt) {
-  return new Promise(resolve=>{
-    const rl=readline.createInterface({input:process.stdin,output:process.stdout});
-    rl.question(prompt,answer=>{rl.close();resolve(answer.trim())});
-  });
+function showPairingCodeInNotepad(request){
+  if(process.platform!=='win32')throw new Error('Computer-generated pairing requires the Windows Agent.');
+  if(!/^[0-9a-f-]{36}$/i.test(request.requestId)||!/^\d{6}$/.test(request.code))throw new Error('Cloud returned invalid pairing details.');
+  const file=path.join(credentialDir,'pairing-code-'+request.requestId+'.txt');
+  fs.writeFileSync(file,'PhoneBridge one-time pairing code\r\n\r\n'+request.code+'\r\n\r\nEnter this code in the Pair a Device panel on your signed-in phone.\r\nIt expires in five minutes and can only be approved once.\r\n',{encoding:'utf8',flag:'wx',mode:0o600});
+  secureCredentialPath(file,false);
+  execFile('notepad.exe',[file],{windowsHide:false},error=>{if(error)console.error('Could not open Notepad. The temporary pairing file is stored in the PhoneBridge Agent folder.');});
+  return file;
 }
-
-async function enroll({ previous = null, useCommandLineTicket = false } = {}) {
-  const arg=useCommandLineTicket ? (process.argv[2]||'') : '';
-  let code=(arg||await askForCode('Enter the six-digit PhoneBridge pairing code: ')).trim();
+async function enroll({ previous = null } = {}) {
+  if(process.platform!=='win32')throw new Error('Fresh PhoneBridge pairing is supported by the Windows Agent.');
+  removeAgentPairingFiles();
+  const installationId=previous?.installationId||crypto.randomUUID();
+  const deviceName=os.hostname().slice(0,80)||'Windows computer';
   while(true){
-    if (!/^\d{6}$/.test(code) && !tokenPattern.test(code)) {
-      console.error('Pairing code format is invalid. Generate a new six-digit code.');
-      code=await askForCode('Enter a new PhoneBridge pairing code: ');
-      continue;
-    }
-    let credentials;
-    try { credentials=await redeemPairingCode({code,previous,cloudUrl,exchange:payload=>postJson('/api/agent/enroll',payload)}); }
-    catch(error){
-      if([400,401,409].includes(error.statusCode)){
-        console.error(error.message+' Generate a new code in the PhoneBridge workspace.');
-        code=await askForCode('Enter a new PhoneBridge pairing code: ');
-        continue;
+    let request;
+    try{
+      request=await postJson('/api/agent/pairing-requests',{
+        installationId,deviceName,previousDeviceId:previous?.deviceId||null
+      });
+    }catch(error){
+      if(!error.statusCode||error.statusCode===408||error.statusCode===425||error.statusCode===429||error.statusCode>=500){
+        console.error('PhoneBridge pairing service unavailable; retrying automatically.');
+        await new Promise(resolve=>setTimeout(resolve,5000));continue;
       }
-      if(!error.statusCode||error.statusCode===408||error.statusCode===425||error.statusCode===429||error.statusCode>=500){console.error('Cloud unavailable during enrollment; retrying the same code in 5 seconds.');await new Promise(resolve=>setTimeout(resolve,5000));continue;}
       throw error;
     }
-    if (!credentials) {
-      console.error('Cloud enrollment response was invalid. Generate a new pairing code.');
-      code=await askForCode('Enter a new PhoneBridge pairing code: ');
-      continue;
-    }
-    writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
-    console.log('Enrolled as '+credentials.deviceName+'. Credentials saved securely.');
-    return credentials;
-  }
-}
-
-async function execute(command) {
-  if (!command || typeof command!=='object' || !uuidPattern.test(command.id||'') ||
-      !allowedActions.has(command.action) || !command.payload || typeof command.payload!=='object' ||
-      Array.isArray(command.payload)) throw new Error('Cloud command is invalid or unsupported.');
-  const payload=command.payload||{};
-  switch(command.action) {
-    case 'system_info':
-      return { hostname:os.hostname(),platform:os.platform(),release:os.release(),arch:os.arch(),totalMemory:os.totalmem(),freeMemory:os.freemem(),uptime:os.uptime() };
-    case 'list_files': {
-      const dir=safePath(payload.path||'.');
-      const rows=fs.readdirSync(dir,{withFileTypes:true}).slice(0,500).map(entry=>({name:entry.name,type:entry.isDirectory()?'folder':'file'}));
-      return {path:payload.path||'.',entries:rows};
-    }
-    case 'read_file': {
-      const file=safePath(payload.path);
-      const text=fs.readFileSync(file,'utf8').slice(0,12000);
-      return {path:payload.path,text};
-    }
-    case 'write_file': {
-      const file=safePath(payload.path);
-      if (typeof payload.content!=='string' || Buffer.byteLength(payload.content,'utf8')>1024*1024) throw new Error('Invalid file content.');
-      fs.mkdirSync(path.dirname(file),{recursive:true});
-      fs.writeFileSync(file,payload.content,'utf8');
-      return {path:payload.path,written:true};
-    }
-    case 'create_folder': {
-      const dir=safePath(payload.path);
-      fs.mkdirSync(dir,{recursive:true});
-      return {path:payload.path,created:true};
-    }
-    case 'launch_app': {
-      const apps={notepad:'notepad.exe',calculator:'calc.exe',explorer:'explorer.exe'};
-      if (!apps[payload.app]) throw new Error('App is not allowed.');
-      await new Promise((resolve,reject)=>execFile(apps[payload.app],[],{windowsHide:false},error=>error?reject(error):resolve()));
-      return {app:payload.app,launched:true};
-    }
-    default:
-      throw new Error('Action is not supported by this worker.');
+    if(!request?.ok||!/^[0-9a-f-]{36}$/i.test(request.requestId||'')||!/^\d{6}$/.test(request.code||'')||!tokenPattern.test(request.pollToken||'')||!Number.isFinite(Date.parse(request.expiresAt||'')))throw new Error('PhoneBridge returned invalid pairing details.');
+    const codeFile=showPairingCodeInNotepad(request);
+    console.log('A one-time pairing code is open in Notepad. Enter it in PhoneBridge on your signed-in phone.');
+    let expired=false;
+    try{
+      while(Date.now()<Date.parse(request.expiresAt)){
+        try{
+          const result=await postJson('/api/agent/pairing-requests/'+request.requestId+'/claim',{},request.pollToken);
+          if(result.approved){
+            if(!tokenPattern.test(result.agentToken||'')||!/^([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(result.deviceId||'')||typeof result.deviceName!=='string')throw new Error('PhoneBridge returned invalid device credentials.');
+            const credentials=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()});
+            writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
+            console.log('Computer paired. Agent credentials saved with Windows user-only access.');
+            return credentials;
+          }
+        }catch(error){
+          if(error.statusCode===410){expired=true;break;}
+          if(error.statusCode===401||error.statusCode===409){expired=true;break;}
+          console.error('PhoneBridge pairing service unavailable; checking again automatically.');
+        }
+        await new Promise(resolve=>setTimeout(resolve,3000));
+      }
+    }finally{try{fs.unlinkSync(codeFile);}catch(_){}}
+    if(expired||Date.now()>=Date.parse(request.expiresAt))console.error('Pairing code expired or was no longer valid. A fresh code is being opened in Notepad.');
   }
 }
 
 async function main() {
+  removeAgentPairingFiles();
   let credentials;
   if (fs.existsSync(credentialPath)) {
     try {
@@ -204,24 +156,15 @@ async function main() {
       writeCredentials(credentialPath,credentials,target=>secureCredentialPath(target,false));
     } catch (error) {
       if(error.message.includes('symbolic link')||error.message.includes('Saved cloud URL does not match'))throw error;
-      console.error('Saved agent credentials could not be read. Re-pair this computer to recover.');
-      credentials=await enroll({useCommandLineTicket:false});
+      console.error('Saved agent credentials could not be read. Start a fresh pairing from the signed-in PhoneBridge app.');
+      credentials=await enroll();
     }
-  } else credentials=await enroll({useCommandLineTicket:true});
+  } else credentials=await enroll();
   console.log('PhoneBridge outbound worker is running.');
   await runReconnectLoop({
     credentials,
-    claim:current=>postJson('/api/agent/commands/claim',{deviceId:current.deviceId},current.agentToken),
-    reEnroll:previous=>{console.error('This computer’s saved cloud access was revoked or expired. Generate a new pairing code in your PhoneBridge account to reconnect.');return enroll({previous});},
-    onCommand:async(command,current)=>{
-      if(!uuidPattern.test(command.id||''))throw new Error('Cloud returned a command with an invalid ID.');
-      try {
-        const result=await execute(command);
-        await postJson('/api/agent/commands/'+command.id+'/result',{deviceId:current.deviceId,success:true,result},current.agentToken);
-      } catch(error) {
-        await postJson('/api/agent/commands/'+command.id+'/result',{deviceId:current.deviceId,success:false,error:String(error.message||error).slice(0,500)},current.agentToken);
-      }
-    },
+    claim:current=>postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken),
+    reEnroll:previous=>{console.error("This computer credentials were revoked or expired. Approve the fresh Notepad code from your signed-in PhoneBridge account.");return enroll({previous});},
     sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),
     report:(kind,error)=>{
       if(kind==='enroll-error')console.error('Re-pairing failed: '+error.message);

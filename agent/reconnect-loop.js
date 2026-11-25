@@ -1,6 +1,6 @@
 'use strict';
 
-async function runReconnectLoop({ credentials:initial, claim, reEnroll, onCommand, sleep, report, signal }) {
+async function runReconnectLoop({ credentials:initial, claim, reEnroll, sleep, report, signal }) {
   let credentials=initial;
   let requiresEnrollment=false;
   while(!signal?.aborted) {
@@ -11,7 +11,7 @@ async function runReconnectLoop({ credentials:initial, claim, reEnroll, onComman
     }
     try {
       const result=await claim(credentials);
-      if(result?.command)await onCommand(result.command,credentials);
+      if(result?.command)report?.('task-disabled',new Error('Computer tasks are disabled in the customer workspace.'));
       await sleep(3000);
     } catch(error) {
       if(error.statusCode===401||error.statusCode===403) {

@@ -111,6 +111,12 @@ test('network interruptions retry the saved credential without forcing enrollmen
   assert.equal(calls,2);assert.deepEqual(waits,[5000,3000]);
 });
 
+test('agent ignores legacy task responses while keeping its connection heartbeat',async()=>{
+  const controller=new AbortController();let executed=0,disabled=0;
+  await runReconnectLoop({credentials:valid,claim:async()=>{controller.abort();return{command:{id:'old-task',action:'system_info'}};},reEnroll:async()=>assert.fail('task delivery should not force enrollment'),sleep:pause,report:kind=>{if(kind==='task-disabled')disabled++;},signal:controller.signal});
+  assert.equal(executed,0);assert.equal(disabled,1);
+});
+
 test('device heartbeat status is online only for enabled agents with a recent non-future heartbeat',()=>{
   const now=Date.parse('2026-11-23T12:00:00.000Z');
   assert.equal(isDeviceOnline(true,new Date(now-10_000).toISOString(),now),true);

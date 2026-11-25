@@ -197,44 +197,67 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   }
 });
 
-// Owner-authenticated command queue. Mutating actions require an explicit UI approval flag.
-app.post('/api/commands', rateLimit(30,10*60*1000), async (req,res)=>{
+// New pairing starts on the computer. The Agent receives a short-lived code,
+// then the signed-in phone approves that code and binds it to its account.
+app.post('/api/agent/pairing-requests', rateLimit(4,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
-  const user = await requireOwner(req,res);
-  if (!user) return;
-  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Command service is not configured.' });
-  const { deviceId, action } = req.body || {};
-  const payload = req.body?.payload === undefined ? {} : req.body.payload;
-  const approved = req.body?.approved === true;
-  const allowed = ['system_info','list_files','read_file','write_file','create_folder','launch_app'];
-  if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({ ok:false, error:'Choose a valid device.' });
-  if (!allowed.includes(action)) return res.status(400).json({ ok:false, error:'Action is not allowed.' });
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.status(400).json({ ok:false, error:'Task payload must be an object.' });
-  if (['write_file','create_folder'].includes(action) && !approved) return res.status(403).json({ ok:false, error:'This action requires explicit owner approval.' });
-  const relativePath = payload.path;
-  if (['list_files','read_file','write_file','create_folder'].includes(action)) {
-    if (typeof relativePath !== 'string' || !relativePath.trim() || relativePath.length > 240 || path.isAbsolute(relativePath) || relativePath.split(/[\\\\/]+/).some(part => part === '..')) return res.status(400).json({ ok:false, error:'Use a safe relative path inside the PhoneBridge workspace.' });
-  }
-  if (action === 'write_file' && (typeof payload.content !== 'string' || Buffer.byteLength(payload.content,'utf8') > 1024*1024)) return res.status(400).json({ ok:false, error:'File content must be text no larger than 1 MB.' });
-  if (action === 'launch_app' && !['notepad','calculator','explorer'].includes(payload.app)) return res.status(400).json({ ok:false, error:'Choose an approved app.' });
-  try {
-    const { data:device, error:deviceError } = await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
-    if (deviceError || !device) return res.status(404).json({ ok:false, error:'That device was not found in your account.' });
-    const { data, error } = await supabaseAdmin.from('device_commands').insert({
-      user_id:user.id, device_id:deviceId, action, payload,
-      status:'queued', expires_at:new Date(Date.now()+2*60*1000).toISOString()
-    }).select('id,action,status,created_at').single();
-    if (error) throw error;
-    return res.status(201).json({ ok:true, command:data });
-  } catch (_) { return res.status(503).json({ ok:false, error:'Could not queue this task. Confirm relay database migrations are deployed.' }); }
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
+  const deviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
+  const installationId=typeof req.body?.installationId==='string'?req.body.installationId:'';
+  const previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:null;
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if(!deviceName||deviceName.length>80||!uuid.test(installationId)||
+     (previousDeviceId!==null&&!uuid.test(previousDeviceId)))return res.status(400).json({ok:false,error:'Computer pairing details are invalid.'});
+  try{
+    await supabaseAdmin.from('device_pairing_requests').delete().lt('expires_at',new Date().toISOString());
+    const expiresAt=new Date(Date.now()+5*60*1000).toISOString();
+    const pollToken=crypto.randomBytes(32).toString('base64url');
+    const pollTokenHash=crypto.createHash('sha256').update(pollToken).digest('hex');
+    for(let attempt=0;attempt<5;attempt++){
+      const code=generatePairingCode();
+      const codeHash=hashEnrollmentCode(code,serviceKey);
+      const {data,error}=await supabaseAdmin.from('device_pairing_requests').insert({
+        code_hash:codeHash,poll_token_hash:pollTokenHash,installation_id:installationId,
+        previous_device_id:previousDeviceId,device_name:deviceName,expires_at:expiresAt
+      }).select('id').single();
+      if(!error)return res.status(201).json({ok:true,requestId:data.id,code,pollToken,expiresAt,expiresInSeconds:300});
+      if(error.code!=='23505')throw error;
+    }
+    throw new Error('Could not create a unique pairing request.');
+  }catch(_){return res.status(503).json({ok:false,error:'Could not start computer pairing. Confirm migration 004 is installed.'});}
 });
 
-// Device agent polls for one command using its per-device bearer token.
+// Only the signed-in account can claim an unapproved computer-generated code.
+app.post('/api/enrollments/approve', rateLimit(10,10*60*1000), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);
+  if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
+  const code=typeof req.body?.code==='string'?req.body.code.trim():'';
+  if(!/^\d{6}$/.test(code))return res.status(400).json({ok:false,error:'Enter the six-digit code shown on your computer.'});
+  const now=new Date().toISOString();
+  try{
+    const {data,error}=await supabaseAdmin.from('device_pairing_requests').update({user_id:user.id,approved_at:now})
+      .eq('code_hash',hashEnrollmentCode(code,serviceKey)).is('user_id',null).is('approved_at',null)
+      .is('consumed_at',null).gt('expires_at',now).select('id,device_name,expires_at').maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(409).json({ok:false,error:'That code is invalid, expired, or already approved. Check the code on the computer and try again.'});
+    return res.status(200).json({ok:true,deviceName:data.device_name,expiresAt:data.expires_at,waitingForComputer:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not approve this computer. Confirm migration 004 is installed.'});}
+});
+
+// Task execution is intentionally disabled in the customer workspace.
+app.post('/api/commands', rateLimit(30,10*60*1000), (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  return res.status(410).json({ok:false,error:'Computer tasks are not enabled in this PhoneBridge workspace.'});
+});
+
+// Authenticate paired agents with their per-device bearer credential.
 const agentRateScope=req=>{
   const token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
   return token?'agent:'+crypto.createHash('sha256').update(token).digest('hex'):getClientAddress(req);
 };
-app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
+async function recordAgentHeartbeat(req,res) {
   res.setHeader('Cache-Control','no-store');
   if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
   const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
@@ -242,33 +265,51 @@ app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*10
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId) || !token) return res.status(401).json({ ok:false, error:'Device authentication required.' });
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   try {
-    const { data:agent, error:authError } = await supabaseAdmin.from('device_agents').select('device_id').eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).maybeSingle();
-    if (authError || !agent) return res.status(401).json({ ok:false, error:'Device authentication failed.' });
-    const { data, error } = await supabaseAdmin.rpc('phonebridge_claim_device_command',{p_device_id:deviceId,p_token_hash:tokenHash});
+    const now=new Date().toISOString();
+    const {data,error}=await supabaseAdmin.from('device_agents').update({last_seen_at:now})
+      .eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).select('device_id').maybeSingle();
     if (error) throw error;
-    return res.json({ ok:true, command:data || null });
-  } catch (_) { return res.status(503).json({ ok:false, error:'Could not claim a command. Check that relay migrations 002 and 003 are deployed.' }); }
-});
+    if(!data)return res.status(401).json({ok:false,error:'Device authentication failed.'});
+    return res.json({ok:true,lastSeenAt:now});
+  } catch (error) {
+    return res.status(503).json({ok:false,error:'Could not update computer status.'});
+  }
+}
+app.post('/api/agent/heartbeat', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
+// Compatibility route for already-installed Agents; it now only updates status.
+app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
 
 app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
-  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device broker is not configured.' });
-  const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : '';
-  const token = /^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization') || '')?.[1] || '';
-  const commandId = req.params.commandId;
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(commandId) || !token) return res.status(401).json({ ok:false, error:'Device authentication required.' });
-  if (typeof req.body?.success !== 'boolean') return res.status(400).json({ ok:false, error:'A boolean success value is required.' });
-  if (req.body.result !== undefined && (!req.body.result || typeof req.body.result !== 'object' || Array.isArray(req.body.result))) return res.status(400).json({ ok:false, error:'Result must be a JSON object.' });
-  if (JSON.stringify(req.body.result || {}).length > 24000) return res.status(413).json({ ok:false, error:'Result is too large.' });
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  try {
-    const { data:agent, error:authError } = await supabaseAdmin.from('device_agents').select('device_id').eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).maybeSingle();
-    if (authError || !agent) return res.status(401).json({ ok:false, error:'Device authentication failed.' });
-    const { data, error } = await supabaseAdmin.rpc('phonebridge_complete_device_command',{p_device_id:deviceId,p_token_hash:tokenHash,p_command_id:commandId,p_success:req.body.success,p_result:req.body.result || null,p_error:typeof req.body.error === 'string' ? req.body.error.slice(0,500) : null});
-    if (error) throw error;
-    if (!data) return res.status(409).json({ ok:false, error:'Command is no longer claimable for completion.' });
-    return res.json({ ok:true, completed:true });
-  } catch (_) { return res.status(503).json({ ok:false, error:'Could not submit command result. Check that relay migrations 002 and 003 are deployed.' }); }
+  return res.status(410).json({ok:false,error:'Computer task execution is not enabled in this PhoneBridge workspace.'});
+});
+
+// The computer polls with a high-entropy secret; credentials are returned once,
+// only after an authenticated account approved this exact pairing request.
+app.post('/api/agent/pairing-requests/:requestId/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device pairing is not configured.'});
+  const requestId=req.params.requestId||'';
+  const pollToken=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)||!pollToken)return res.status(401).json({ok:false,error:'Pairing request authentication required.'});
+  const pollTokenHash=crypto.createHash('sha256').update(pollToken).digest('hex');
+  try{
+    const {data:request,error}=await supabaseAdmin.from('device_pairing_requests').select('id,expires_at,user_id,approved_at,consumed_at')
+      .eq('id',requestId).eq('poll_token_hash',pollTokenHash).maybeSingle();
+    if(error)throw error;
+    if(!request)return res.status(401).json({ok:false,error:'Pairing request authentication failed.'});
+    if(request.consumed_at)return res.status(409).json({ok:false,error:'This pairing request was already completed.'});
+    if(new Date(request.expires_at).getTime()<=Date.now())return res.status(410).json({ok:false,error:'This pairing code expired. Start pairing again on the computer.'});
+    if(!request.user_id||!request.approved_at)return res.json({ok:true,approved:false});
+    const agentToken=crypto.randomBytes(32).toString('base64url');
+    const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
+    const {data:claimed,error:claimError}=await supabaseAdmin.rpc('phonebridge_complete_pairing_request',{
+      p_request_id:requestId,p_poll_token_hash:pollTokenHash,p_agent_token_hash:tokenHash
+    });
+    if(claimError)throw claimError;
+    if(!claimed)return res.status(409).json({ok:false,error:'This pairing request is no longer available.'});
+    return res.status(200).json({ok:true,approved:true,deviceId:claimed.deviceId,deviceName:claimed.deviceName,agentToken});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not complete computer pairing. Confirm migration 004 is installed.'});}
 });
 
 // Windows agent redeems a one-time pairing code for a long-lived per-device bearer token.
