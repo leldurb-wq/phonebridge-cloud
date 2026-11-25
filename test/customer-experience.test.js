@@ -138,7 +138,7 @@ test('computer-initiated pairing requires approval from the signed-in phone befo
 test('PhoneBridge pairing generates the code on the computer and asks the phone to approve it',()=>{
  const page=html();assert.match(page,/id="pairingCodeDisplay"/);assert.match(page,/Pair this computer/);assert.match(page,/http:\/\/127\.0\.0\.1:32145\/pairing\/start/);
  assert.match(page,/id="phonePairCode"/);assert.match(page,/id="approvePair"/);assert.ok(page.includes("/api/enrollments/approve"));
- assert.match(page,/fresh secure check-in/);const pairing=page.slice(page.indexOf('id="phonePanel"'),page.indexOf('id="workspace"'));assert.doesNotMatch(pairing,/phone-generated code|Agent window/);
+ assert.doesNotMatch(page,/HOW IT WORKS|Three steps\. One connection|Start on your computer|Approve on your phone|fresh secure check-in/);assert.doesNotMatch(page,/id="pairHelp"/);const pairing=page.slice(page.indexOf('id="phonePanel"'),page.indexOf('id="workspace"'));assert.doesNotMatch(pairing,/phone-generated code|Agent window/);
 });
 
 test('cloud CORS allows the Render app and the official PhoneBridge custom domain only',()=>{
