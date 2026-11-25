@@ -31,6 +31,18 @@ test('post-pairing opens the cinematic feature workspace only after a fresh onli
  assert.match(page,/body\[data-page="computer"\] #workspace>#deviceManager/);
 });
 
+test('cinematic workspace uses a full-bleed dark outer shell without light page gutters',()=>{
+ const page=html();const theme=page.slice(page.indexOf('id="pbx-workspace-dark-surroundings"'),page.indexOf('</style>',page.indexOf('id="pbx-workspace-dark-surroundings"')));
+ assert.match(theme,/html\{background:#050914!important\}/);
+ assert.match(theme,/body\[data-page="overview"\][\s\S]*background:[\s\S]*#050914!important/);
+ assert.match(theme,/body\[data-page="overview"\] \.shell\{width:100%;max-width:none/);
+ assert.match(theme,/body\[data-page="overview"\] \.topbar\{[\s\S]*background:rgba\(4,10,22,\.9\)!important/);
+ assert.match(theme,/body\[data-page="overview"\] \.phonebridge-workspace>p:first-child\{display:none!important\}/);
+ assert.match(theme,/body\[data-page="overview"\] #workspace>\.card\{display:none!important\}/);
+ assert.match(theme,/body\[data-page="overview"\] \.nav,body\[data-page="overview"\] \.mobile-tabbar,body\[data-page="overview"\] \.a11y-bar\{display:none!important\}/);
+ assert.match(theme,/body\[data-page="overview"\] #workspace>#dynamicWorkspace\{width:100%;max-width:none/);
+});
+
 test('the unified light theme loads after legacy styles and covers desktop and mobile navigation',()=>{
  const page=html();const oldTheme=page.indexOf('phonebridge-redesign.css');const unifiedTheme=page.indexOf('phonebridge-unified.css');
  assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads last in the document head');

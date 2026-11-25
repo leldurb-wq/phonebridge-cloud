@@ -1388,6 +1388,46 @@ body[data-page="computer"] #workspace>#deviceManager{display:block!important;wid
 @keyframes pbx-limited-card-enter{to{transform:translateY(0);opacity:.72}}
 @media(prefers-reduced-motion:reduce){body[data-page="overview"] #workspace>#dynamicWorkspace,.pbx-hero-copy,.pbx-visual,.pbx-feature.is-limited{animation:none!important;opacity:1;transform:none;filter:none}}
 </style>
+<style id="pbx-workspace-dark-surroundings">
+/* Full-bleed dark shell: no light page gutters, header, sidebar or legacy cards around the canvas. */
+html{background:#050914!important}
+body[data-page="overview"]{
+ color-scheme:dark!important;min-height:100svh;overflow-x:hidden;
+ background:radial-gradient(ellipse at 78% -10%,#0b42702c 0,transparent 38%),radial-gradient(ellipse at 5% 62%,#123d6220 0,transparent 34%),#050914!important;
+ color:#edf7ff!important
+}
+body[data-page="overview"]:before{
+ opacity:.18!important;background-image:linear-gradient(#65cfff0b 1px,transparent 1px),linear-gradient(90deg,#65cfff0b 1px,transparent 1px)!important;
+ background-size:58px 58px!important;mask-image:linear-gradient(to bottom,#000,transparent 82%)!important
+}
+body[data-page="overview"] .shell{width:100%;max-width:none;min-height:100svh;margin:0;padding:0!important;background:transparent!important}
+body[data-page="overview"] .topbar{
+ position:relative;top:auto;width:100%;min-height:68px;margin:0;padding:10px clamp(16px,3.5vw,54px)!important;
+ background:rgba(4,10,22,.9)!important;border:0!important;border-bottom:1px solid #65cfff20!important;border-radius:0!important;
+ box-shadow:0 10px 35px #0002!important;backdrop-filter:blur(24px)
+}
+body[data-page="overview"] .brand strong{color:#f1f8ff!important}
+body[data-page="overview"] .brand small{color:#82a4c4!important}
+body[data-page="overview"] .logo{background:linear-gradient(145deg,#9cecff,#3b9fe0 58%,#5868ce)!important;color:#061425!important;box-shadow:0 0 22px #38bfff45!important}
+body[data-page="overview"] .top-actions .role{color:#a8c9e6!important;background:#10243a!important;border:1px solid #345c7c!important}
+body[data-page="overview"] .top-actions .status{color:#8af0ce!important;background:#0c2b28!important;border:1px solid #286b5b!important}
+body[data-page="overview"] .top-actions .a11y-btn{color:#c7eaff!important;background:#10243a!important;border:1px solid #345c7c!important}
+body[data-page="overview"] .phonebridge-workspace{width:100%;max-width:none;margin:0!important;padding:0!important;background:transparent!important}
+body[data-page="overview"] .phonebridge-workspace>p:first-child{display:none!important}
+body[data-page="overview"] .nav,body[data-page="overview"] .mobile-tabbar,body[data-page="overview"] .a11y-bar{display:none!important}
+body[data-page="overview"] #workspace{width:100%;max-width:none;margin:0;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+body[data-page="overview"] #workspace>.card{display:none!important}
+body[data-page="overview"] #workspace>#dynamicWorkspace{width:100%;max-width:none;min-height:calc(100svh - 68px);margin:0;padding:clamp(22px,3.5vw,52px) clamp(18px,4vw,68px) 38px;border:0!important;border-radius:0!important;box-shadow:none!important}
+body[data-page="overview"] .footer{display:none!important}
+@media(max-width:850px){
+ body[data-page="overview"] .topbar{padding:9px 15px!important}
+ body[data-page="overview"] .shell{padding:0!important}
+ body[data-page="overview"] #workspace>#dynamicWorkspace{min-height:calc(100svh - 60px);padding:18px 16px 28px}
+}
+@media(prefers-reduced-motion:reduce){
+ body[data-page="overview"] #dynamicWorkspace{animation:none!important}
+}
+</style>
 <section id="workspace" class="hidden">
  <section id="dynamicWorkspace" aria-label="PhoneBridge connected workspace">
  <div class="pbx-backdrop" aria-hidden="true"><i class="pbx-starfield"></i><i class="pbx-ambient pbx-ambient-one"></i><i class="pbx-ambient pbx-ambient-two"></i></div>
