@@ -762,6 +762,10 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
 // Unknown legacy/local APIs must not fall through to the SPA and look successful.
 app.use('/api',(req,res)=>res.status(501).json({ok:false,error:'This API is not available in the cloud application yet.'}));
 
+// Public product homepage; the authenticated PhoneBridge workspace remains available at /app.
+app.get('/',(req,res)=>res.sendFile(path.join(__dirname,'public','landing.html')));
+app.get('/app',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+
 app.use(express.static(path.join(__dirname,'public'),{
   extensions:['html'],
   maxAge:process.env.NODE_ENV==='production'?'1h':0,
