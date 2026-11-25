@@ -154,7 +154,6 @@ async function receiveTransfer({transfer,downloadChunk,complete,baseDir}){
       }
       try{fs.unlinkSync(temp)}catch{}
       try{fs.unlinkSync(receipt)}catch{}
-      try{await complete({status:'failed',error:String(error.message||'Transfer failed').slice(0,240)})}catch{}
       throw error;
     }
 
