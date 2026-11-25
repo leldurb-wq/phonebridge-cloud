@@ -991,8 +991,13 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
 <section class="card" style="margin:0 0 16px"><div class="card-head"><h2>PhoneBridge account</h2><span class="pill">Signed in</span></div><p class="sub" id="connectedAs">Pair a computer to check its connection status.</p><div class="actions"><button class="btn quiet" id="disconnect">Disconnect this phone</button><button class="btn quiet" id="workspaceRefresh">Refresh workspace</button></div></section>
  <div class="layout">
   <div class="maincol">
-   <section class="card" id="transfer"><div class="card-head"><h2>Transfer files</h2><span class="pill">Up to 250 MB per file</span></div><p class="sub">Send photos, videos, PDFs and documents from this device to your private PhoneBridge cloud Drive. Files are available when you sign in on your other devices.</p>
-    <div class="drop" id="drop"><div class="drop-icon">←</div><b>Drop files here or browse</b><p>Select or drop multiple files · private cloud transfer</p><label class="btn secondary" for="fileInput">Choose files</label><input id="fileInput" type="file" multiple><div class="message" id="uploadMsg" role="status"></div><div class="progress hidden" id="uploadProgress"><span id="uploadBar"></span></div></div>
+   <section class="card" id="transfer"><div class="card-head"><h2>Send files to your ThinkPad</h2><span class="pill">Up to 2 GB per file</span></div><p class="sub">Send photos, videos, documents and large files directly to your paired computer. PhoneBridge transfers in secure 8 MB chunks and saves completed files in Documents\\PhoneBridge\\Incoming on the ThinkPad.</p>
+    <label class="notice" for="pcDeviceSelect">Choose your paired computer</label><select class="field" id="pcDeviceSelect" aria-label="Choose paired computer" style="margin:8px 0 14px"><option value="">Loading paired computers…</option></select>
+    <div class="drop" id="pcDrop"><div class="drop-icon">↑</div><b>Choose files to send to your computer</b><p>Large files supported · resumable chunk upload · integrity checked</p><label class="btn secondary" for="pcFileInput">Choose files</label><input id="pcFileInput" type="file" multiple><div class="message" id="pcTransferMsg" role="status"></div><div class="progress hidden" id="pcTransferProgress"><span id="pcTransferBar"></span></div></div>
+    <div class="queue" id="pcTransferQueue"></div>
+   </section>
+   <section class="card" id="cloudUpload"><div class="card-head"><h2>Upload to PhoneBridge Drive</h2><span class="pill">Cloud storage · 250 MB per file</span></div><p class="sub">Store a copy in your private cloud Drive so it is available on your other signed-in devices.</p>
+    <div class="drop" id="drop"><div class="drop-icon">☁</div><b>Drop files here or browse</b><p>Private cloud Drive upload</p><label class="btn secondary" for="fileInput">Choose files</label><input id="fileInput" type="file" multiple><div class="message" id="uploadMsg" role="status"></div><div class="progress hidden" id="uploadProgress"><span id="uploadBar"></span></div></div>
     <div class="queue" id="uploadQueue"></div>
    </section>
    <section class="card" id="library"><div class="card-head"><h2>Phone Bridge Drive</h2><span class="pill">Private cloud storage</span></div><p class="sub">Organize your private cloud files, find them quickly, mark favorites and manage your storage from any signed-in device.</p><div class="toolbar"><b style="font-size:11px">Storage used</b><span id="storageText" class="muted" style="font-size:10px">Checking…</span></div><div class="progress"><span id="storageBar"></span></div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:15px"><input class="field" id="driveSearch" type="search" placeholder="Search files…" aria-label="Search files"><select class="field" id="driveFolder" aria-label="Filter folder"><option value="*">All folders</option><option value="">Unfiled</option></select><select class="field" id="driveSort" aria-label="Sort files"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A-Z</option><option value="largest">Largest first</option></select><select class="field" id="driveFilter" aria-label="Filter files"><option value="all">All files</option><option value="favorites">Favorites</option><option value="images">Images</option><option value="videos">Videos</option><option value="audio">Audio</option><option value="documents">Documents</option></select></div><div class="toolbar"><span class="muted" id="fileCount" style="font-size:11px">Loading your files…</span><button class="btn quiet" id="downloadSelected" type="button">Download selected</button><div class="actions" style="margin:0"><button class="btn quiet" id="newFolder" type="button">New folder</button><button class="btn secondary" id="refresh">Refresh</button></div></div><p class="notice">Select files for batch download. Preview opens here for images, PDFs, text, video and audio. Video and audio playback supports browser-compatible formats.</p><div class="filelist" id="files"><div class="empty"><b>Loading Drive</b>Your files will appear here.</div></div></section>
@@ -1004,7 +1009,7 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
   </div>
   <aside class="sidecol">
    <section class="card" id="notes"><div class="card-head"><h2>Phone Bridge Workspace</h2><span class="pill">Notes & history</span></div><p class="sub">Keep separate notes for ideas, plans and reminders. Changes save automatically, and previous versions can be restored.</p><div class="actions"><button class="btn primary" id="newNote" type="button">＋ New note</button><button class="btn secondary" id="refreshNotes" type="button">Refresh notes</button></div><div class="layout notes-grid" style="grid-template-columns:minmax(180px,.7fr) minmax(0,1.8fr);margin-top:14px"><div><div class="filelist" id="notesList"><div class="empty">Loading your notes…</div></div></div><div><input class="field" id="noteTitle" maxlength="100" placeholder="Note title" aria-label="Note title"><textarea class="note-area" id="note" maxlength="50000" placeholder="Start writing…" style="margin-top:10px"></textarea><div class="toolbar"><span class="muted" id="noteCount" style="font-size:10px">0 / 50,000</span><span class="muted" style="font-size:10px" id="noteUpdated">Not saved yet</span></div><div class="actions"><button class="btn primary" id="saveNote" type="button">Save now</button><button class="btn secondary" id="noteHistory" type="button">Version history</button><button class="btn quiet" id="copyNote" type="button">Copy text</button><button class="btn danger" id="deleteNote" type="button">Delete note</button></div><div class="message" id="noteMsg" role="status"></div><div class="filelist hidden" id="noteHistoryList"></div></div></div></section>
-   <section class="card" id="help"><div class="card-head"><h2>Help & privacy</h2><span class="pill">Cloud workspace</span></div><div class="steps"><div class="step"><span class="number">1</span><span>Sign in with your PhoneBridge account. Your account session is stored by Supabase; local desktop session exchange is not used.</span></div><div class="step"><span class="number">2</span><span>On your computer, tap Pair to generate a six-digit code. Enter it on your phone and tap Connect. Codes expire after five minutes and are single-use.</span></div><div class="step"><span class="number">3</span><span>Open a paired computer to see its online status and last check-in. The background connector is used only for enrollment and connection status.</span></div></div><p class="notice" style="margin:14px 0 0">The legacy Drive, browser file transfer, synchronization, notes, AI pages and audio/video streaming still depend on local-only services and are not active in the cloud app. Computer tasks, task history, screen viewing, mouse control and keyboard control are not available in this workspace. Cloud APIs enforce account ownership; service-role credentials remain server-side.</p></section>
+   <section class="card" id="help"><div class="card-head"><h2>Help & privacy</h2><span class="pill">Cloud workspace</span></div><div class="steps"><div class="step"><span class="number">1</span><span>Sign in with your PhoneBridge account. Your account session is stored by Supabase; local desktop session exchange is not used.</span></div><div class="step"><span class="number">2</span><span>On your computer, tap Pair to generate a six-digit code. Enter it on your phone and tap Connect. Codes expire after five minutes and are single-use.</span></div><div class="step"><span class="number">3</span><span>Open a paired computer to see its online status and last check-in. The silent background connector also receives only the file transfers you authorize and saves them in your Incoming folder.</span></div></div><p class="notice" style="margin:14px 0 0">Phone-to-PC transfers are delivered to Documents/PhoneBridge/Incoming through the paired background connector. PhoneBridge Drive stores separate private cloud copies. Computer tasks, task history, screen viewing, mouse control and keyboard control are not available in this workspace; media streaming is also unavailable. Cloud APIs enforce account ownership; service-role credentials remain server-side.</p></section>
   </aside>
  </div>
 </section>
@@ -1023,7 +1028,14 @@ function hideLaunchScreen(){const e=$('launchScreen');if(e&&!e.classList.contain
 setTimeout(hideLaunchScreen,1800);
 function toast(s){say('toast',s);$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2300)}
 function headers(extra){const h=new Headers(extra||{});if(accountSession?.access_token)h.set('Authorization','Bearer '+accountSession.access_token);return h}
-async function api(url,opt={}){const method=(opt.method||'GET').toUpperCase();const pathOnly=url.split('?')[0];const safe=pathOnly==='/api/devices'&&method==='GET'||/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method)||pathOnly==='/api/enrollments'&&method==='POST'||pathOnly==='/api/enrollments/approve'&&method==='POST'||pathOnly==='/api/files'&&['GET','PATCH'].includes(method)||pathOnly==='/api/files'&&method==='DELETE'||pathOnly==='/api/upload'&&method==='POST'||pathOnly==='/api/download'&&method==='GET';if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}if(!r.ok)throw Error(data.error||'Cloud request failed');return data}
+async function api(url,opt={}) {
+ const method=(opt.method||'GET').toUpperCase(),pathOnly=url.split('?')[0];
+ const safe=(pathOnly==='/api/transfers'&&method==='POST')||(pathOnly.startsWith('/api/transfers/')&&['PUT','POST','GET','DELETE'].includes(method))||(pathOnly==='/api/devices'&&method==='GET')||(/^\/api\/devices\/[0-9a-f-]{36}$/i.test(pathOnly)&&['PATCH','DELETE'].includes(method))||(pathOnly==='/api/enrollments'&&method==='POST')||(pathOnly==='/api/enrollments/approve'&&method==='POST')||(pathOnly==='/api/files'&&['GET','PATCH','DELETE'].includes(method))||(pathOnly==='/api/upload'&&method==='POST')||(pathOnly==='/api/download'&&method==='GET');
+ if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');
+ const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};
+ try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}
+ if(!r.ok)throw Error(data.error||'Cloud request failed');return data;
+}
 function size(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function accountMessage(message,error=false){const el=$('accountAuthMessage');if(el){el.textContent=message;el.classList.toggle('error',error)}}
@@ -1117,7 +1129,7 @@ $('approvePair').onclick=async()=>{
 
 async function showWorkspace(host){
  if(!host)$('pairScreen').classList.add('hidden');$('workspace').classList.remove('hidden');if(!host)startHeartbeat();else{if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,30000);if(!hostMonitorTimer)hostMonitorTimer=setInterval(async()=>{try{await api('/api/health');setBridgeStatus('Bridge online');setConnectionState('online')}catch(e){setBridgeStatus('Reconnecting');setConnectionState('reconnecting','Bridge connection interrupted','The ThinkPad app is open but the local service is not responding. Check the server, then try again.')}},20000)}
- $('disconnect').classList.toggle('hidden',host);$('securityNav').classList.toggle('hidden',!host);$('securityPage').classList.toggle('hidden',!host);$('setupNav').classList.toggle('hidden',!host);$('connectedAs').textContent=host?'ThinkPad is hosting the shared workspace. Approved phones can transfer files and notes.':'Your account is signed in. Upload files to your private cloud Drive and download them on your other signed-in devices.';
+ $('disconnect').classList.toggle('hidden',host);$('securityNav').classList.toggle('hidden',!host);$('securityPage').classList.toggle('hidden',!host);$('setupNav').classList.toggle('hidden',!host);$('connectedAs').textContent=host?'ThinkPad is hosting the shared workspace. Approved phones can transfer files and notes.':'Your account is signed in. Send files to your paired ThinkPad or store them in your private cloud Drive.';
  await refresh();await loadNote();if(host){await loadDevices();await loadSecurity()}
 }
 function showSessionExpired(){if(heartbeatTimer)clearTimeout(heartbeatTimer);heartbeatTimer=null;legacyToken='';$('workspace').classList.add('hidden');$('pairScreen').classList.remove('hidden');$('phonePanel').classList.remove('hidden');$('phoneCodeBox').classList.add('hidden');$('beginPair').disabled=false;setBridgeStatus('Session expired');setConnectionState('session-expired','Your session has expired','Sign in again to pair your devices.');say('phoneMsg','Your session expired. Sign in again to continue.');showPage('pairing')}
@@ -1179,13 +1191,20 @@ systemAudioPlayer.addEventListener('waiting',()=>say('audioStatus','Buffering Th
 systemAudioPlayer.addEventListener('error',()=>{if(audioRunning)say('audioStatus','Safari could not decode the audio stream.');});
 $('audioStreamButton').onclick=()=>{if(audioRunning||systemAudioPlayer.src)stopSystemAudio();else startSystemAudio()};async function loadDevices(){
  try{
-  const d=await api('/api/devices'),items=d.devices||[];
+  const d=await api('/api/devices'),items=d.devices||[];pcPairedDevices=items;renderPcDeviceChoices();
   say('deviceCount',items.length+' paired computer'+(items.length===1?'':'s'));
   $('legacyDeviceList').innerHTML=items.length?items.map(x=>'<div class="file"><div class="file-icon">PC</div><div class="file-name"><b>'+esc(x.name)+'</b><small><span style="color:'+(x.connected?'#67f5cf':'#e69b91')+'">'+(x.connected?'Online':'Offline')+'</span> - '+(x.lastSeenAt?'Last seen '+esc(new Date(x.lastSeenAt).toLocaleString()):'Background connector has not checked in yet')+'</small></div><div class="file-actions"><button data-cloud-rename="'+esc(x.id)+'" type="button">Rename</button><button class="del" data-cloud-revoke="'+esc(x.id)+'" type="button">Remove</button></div></div>').join(''):'<div class="empty"><b>No computers paired yet</b>Tap Pair this computer, then enter the code on your phone and tap Connect.</div>';
   const online=items.filter(x=>x.connected).length;
   $('connectedAs').textContent=online?online+' computer'+(online===1?' is':'s are')+' online and connected.':items.length?'Your computer is paired to this account but currently Offline. The cloud service being online does not mean the computer is connected.':'Cloud service is online. No computer has paired with this account yet.';
   say('deviceMsg',online?'Device list updated. '+online+' computer(s) confirmed online by a recent computer check-in.':'Device list updated. No computer has a recent computer check-in, so none is connected yet.');return items;
  }catch(e){say('deviceMsg',e.message);$('legacyDeviceList').innerHTML='<div class="empty"><b>Could not load devices</b>'+esc(e.message)+'</div>';return null}
+}
+function renderPcDeviceChoices(){
+ const select=$('pcDeviceSelect');if(!select)return;
+ const previous=select.value;
+ const options=pcPairedDevices.map(device=>'<option value="'+esc(device.id)+'" '+(device.connected?'':'disabled')+'>'+esc(device.name)+' — '+(device.connected?'Online':'Offline')+'</option>').join('');
+ select.innerHTML='<option value="">'+(pcPairedDevices.length?'Choose an online computer':'No paired computer yet')+'</option>'+options;
+ if(previous&&pcPairedDevices.some(device=>device.id===previous&&device.connected))select.value=previous;
 }
 $('legacyRefreshDevices').onclick=loadDevices;
 
@@ -1206,7 +1225,7 @@ $('legacyDeviceList').onclick=async e=>{
  try{await api('/api/devices',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});toast('Device access revoked');await loadDevices()}
  catch(err){say('deviceMsg',err.message);btn.disabled=false}
 };
-let driveFiles=[],driveFolders=[''];
+let driveFiles=[],driveFolders=[''],pcPairedDevices=[];
 function previewUrl(id){return '/api/preview?id='+encodeURIComponent(id)}
 function closeFilePreview(){const box=$('previewOverlay'),stage=$('previewStage');stage.querySelectorAll('video,audio').forEach(m=>{m.pause();m.removeAttribute('src');m.load()});stage.replaceChildren();box.classList.add('hidden');document.body.classList.remove('preview-open')}
 function openFilePreview(id){const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}const kind=fileKind(f.name),url=previewUrl(id),stage=$('previewStage');$('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' · '+(f.folder||'Unfiled')+' · Stored in your private cloud Drive';$('previewDownload').href='/api/download?id='+encodeURIComponent(id);$('previewStatus').textContent='Private preview · playback depends on the file format and browser';stage.replaceChildren();let el;if(kind==='images'&&!/\.heic$/i.test(f.name)){el=document.createElement('img');el.className='preview-image';el.alt=f.name;el.src=url}else if(kind==='videos'){el=document.createElement('video');el.className='preview-video';el.controls=true;el.playsInline=true;el.preload='metadata';el.src=url}else if(kind==='audio'){el=document.createElement('audio');el.className='preview-audio';el.controls=true;el.preload='metadata';el.src=url}else if(/\.pdf$/i.test(f.name)){el=document.createElement('iframe');el.className='preview-document';el.title=f.name;el.src=url}else if(/\.(txt|csv)$/i.test(f.name)){el=document.createElement('iframe');el.className='preview-document';el.title=f.name;el.src=url}else{stage.innerHTML='<div class="empty"><b>Preview is not available for this format</b>Download the file to open it with a compatible app.</div>';$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open');return}stage.appendChild(el);$('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
@@ -1268,6 +1287,72 @@ async function freshAccountToken(){
  accountTokenRefresh=(async()=>{if(!accountSupabase)throw Error('Phone Bridge account service is not ready. Sign in again.');let {data,error}=await accountSupabase.auth.getSession();if(error)throw error;let session=data.session;if(!session)throw Error('Your Phone Bridge account session expired. Sign in again.');if(!session.expires_at||session.expires_at*1000<=Date.now()+60000){const refreshed=await accountSupabase.auth.refreshSession();if(refreshed.error)throw refreshed.error;session=refreshed.data.session}if(!session?.access_token)throw Error('Your Phone Bridge account session expired. Sign in again.');accountSession=session;return session.access_token})();
  try{return await accountTokenRefresh}finally{accountTokenRefresh=null}
 }
+const PC_CHUNK_SIZE=8*1024*1024;
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function hashChunk(blob){
+ const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
+ return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function sendFilesToPc(fileList){
+ const files=[...fileList];if(!files.length)return;
+ await freshAccountToken();
+ const deviceId=$('pcDeviceSelect').value;
+ if(!deviceId){say('pcTransferMsg','Choose an Online paired computer first.');return}
+ const device=pcPairedDevices.find(item=>item.id===deviceId&&item.connected);
+ if(!device){say('pcTransferMsg','That computer is offline. Refresh your paired computers and try again.');return}
+ const emptyFile=files.find(file=>file.size===0);if(emptyFile){say('pcTransferMsg',emptyFile.name+' is empty. Choose a file with content.');return}
+ const tooLarge=files.find(file=>file.size>2*1024*1024*1024);
+ if(tooLarge){say('pcTransferMsg',tooLarge.name+' is larger than the 2 GB limit.');return}
+ const total=files.reduce((sum,file)=>sum+file.size,0),started=Date.now();
+ let sent=0,complete=0;const failed=[];
+ $('pcTransferProgress').classList.remove('hidden');$('pcTransferBar').style.width='0%';
+ $('pcTransferQueue').innerHTML=files.map((file,index)=>'<div class="queue-item" id="pc-transfer-'+index+'"><span>'+esc(file.name)+'</span><span>Waiting · '+size(file.size)+'</span></div>').join('');
+ const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Uploading '+complete+'/'+files.length+' files · '+pct+'% · '+size(rate)+'/s · '+eta+'s remaining')};
+ for(let fileIndex=0;fileIndex<files.length;fileIndex++){
+  const file=files[fileIndex],row=$('pc-transfer-'+fileIndex);let transferId='';
+  try{
+   row.lastElementChild.textContent='Starting secure transfer…';
+   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId,name:file.name,size:file.size,type:file.type||'application/octet-stream'})});
+   const transfer=startedTransfer.transfer;transferId=transfer.id;
+   for(let index=0;index<transfer.chunkCount;index++){
+    const start=index*transfer.chunkSize,end=Math.min(file.size,start+transfer.chunkSize),chunk=file.slice(start,end),digest=await hashChunk(chunk);
+    let error=null;
+    for(let attempt=0;attempt<3;attempt++){
+     try{
+      await api('/api/transfers/'+transferId+'/chunks/'+index,{method:'PUT',headers:{'Content-Type':'application/octet-stream','X-Chunk-SHA256':digest},body:chunk});
+      error=null;break;
+     }catch(problem){error=problem;if(attempt<2)await pause(600*(attempt+1))}
+    }
+    if(error)throw error;
+    sent+=chunk.size;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update();
+   }
+   try{await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(error){const state=await api('/api/transfers/'+transferId);if(!['queued','receiving'].includes(state.transfer.status))throw error}
+   row.lastElementChild.textContent='Waiting for ThinkPad…';
+   let finalStatus='queued';
+   for(let check=0;check<180;check++){
+    await pause(4000);
+    const status=await api('/api/transfers/'+transferId);
+    finalStatus=status.transfer.status;
+    if(finalStatus==='completed')break;
+    if(finalStatus==='failed')throw Error(status.transfer.error||'The ThinkPad could not save this file.');
+   }
+   if(finalStatus==='completed')row.lastElementChild.textContent='Saved on ThinkPad · '+size(file.size);
+   else row.lastElementChild.textContent='Uploaded · waiting for ThinkPad to reconnect';
+   complete++;update();
+  }catch(error){
+   if(transferId){try{const state=await api('/api/transfers/'+transferId);if(state.transfer.status==='uploading')await api('/api/transfers/'+transferId,{method:'DELETE'})}catch{}}
+   failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message;complete++;update();
+  }
+ }
+ say('pcTransferMsg',failed.length?(files.length-failed.length)+' finished · '+failed.join(' · '):'All '+files.length+' file(s) sent to '+device.name+'.');
+ toast(failed.length?'Some PC transfers need attention':'Files sent to ThinkPad');
+}
+$('pcFileInput').addEventListener('change',event=>{sendFilesToPc(event.target.files).catch(error=>say('pcTransferMsg',error.message));event.target.value=''});
+const pcDrop=$('pcDrop');
+['dragenter','dragover'].forEach(name=>pcDrop.addEventListener(name,event=>{event.preventDefault();pcDrop.classList.add('over')}));
+['dragleave','drop'].forEach(name=>pcDrop.addEventListener(name,event=>{event.preventDefault();pcDrop.classList.remove('over')}));
+pcDrop.addEventListener('drop',event=>sendFilesToPc(event.dataTransfer.files).catch(error=>say('pcTransferMsg',error.message)));
+
 async function upload(file,onProgress){
  const accountToken=await freshAccountToken();
  return new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST','/api/upload?name='+encodeURIComponent(file.name));x.withCredentials=true;x.setRequestHeader('Authorization','Bearer '+accountToken);

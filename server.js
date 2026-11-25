@@ -65,8 +65,8 @@ app.use((req,res,next)=>{
     }
   }
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
-    res.setHeader('Access-Control-Allow-Methods','GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-Chunk-SHA256');
+    res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, PATCH, DELETE, OPTIONS');
     return res.status(204).end();
   }
   next();
@@ -252,6 +252,184 @@ app.delete('/api/files',rateLimit(20,10*60*1000),async(req,res)=>{
     if(deleteError)throw deleteError;
     return res.json({ok:true,deleted:true});
   }catch(_){return res.status(503).json({ok:false,error:'Could not delete this file from private storage.'});}
+});
+
+// Resumable phone-to-PC relay. Each request carries one 8 MiB chunk only.
+const PC_TRANSFER_CHUNK=8*1024*1024;
+const PC_TRANSFER_MAX=2*1024*1024*1024;
+const PC_TRANSFER_BUCKET='transfer-chunks';
+app.post('/api/transfers',rateLimit(20,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const deviceId=String(req.body?.deviceId||''),name=cleanFileName(req.body?.name),size=Number(req.body?.size),type=String(req.body?.type||'application/octet-stream').slice(0,120);
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a paired computer.'});
+  if(!Number.isSafeInteger(size)||size<1||size>PC_TRANSFER_MAX)return res.status(413).json({ok:false,error:'Choose a file up to 2 GB.'});
+  try{
+    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,device_agents(enabled,last_seen_at)').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
+    if(deviceError)throw deviceError;
+    const agent=Array.isArray(device?.device_agents)?device.device_agents[0]:device?.device_agents;
+    if(!device||!agent?.enabled||!isDeviceOnline(agent.enabled,agent.last_seen_at))return res.status(409).json({ok:false,error:'That paired computer is offline. Bring PhoneBridge online on the ThinkPad and try again.'});
+    const {count,error:activeError}=await supabaseAdmin.from('phone_transfers').select('id',{count:'exact',head:true}).eq('user_id',user.id).in('status',['uploading','queued','receiving']);
+    if(activeError)throw activeError;
+    if(count>=3)return res.status(429).json({ok:false,error:'Finish or cancel an existing transfer before starting another.'});
+    const id=crypto.randomUUID(),chunkCount=Math.ceil(size/PC_TRANSFER_CHUNK);
+    const {error}=await supabaseAdmin.from('phone_transfers').insert({id,user_id:user.id,device_id:deviceId,file_name:name,mime_type:type,size_bytes:size,chunk_size:PC_TRANSFER_CHUNK,chunk_count:chunkCount,status:'uploading'});
+    if(error)throw error;
+    return res.status(201).json({ok:true,transfer:{id,name,size,chunkSize:PC_TRANSFER_CHUNK,chunkCount}});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not start the PC transfer. Check that migration 005 has been applied.'});}
+});
+app.put('/api/transfers/:transferId/chunks/:index',rateLimit(400,10*60*1000),express.raw({type:'application/octet-stream',limit:'9mb'}),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const id=req.params.transferId,index=Number(req.params.index),bytes=req.body;
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)||!Number.isInteger(index)||index<0||!Buffer.isBuffer(bytes))return res.status(400).json({ok:false,error:'Invalid transfer chunk.'});
+  try{
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,size_bytes,chunk_size,chunk_count,status').eq('id',id).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
+    if(transfer.status!=='uploading')return res.status(409).json({ok:false,error:'This transfer is no longer accepting chunks.'});
+    if(index>=transfer.chunk_count)return res.status(400).json({ok:false,error:'Chunk index is outside this transfer.'});
+    const expected=index===transfer.chunk_count-1?Number(transfer.size_bytes)-index*PC_TRANSFER_CHUNK:PC_TRANSFER_CHUNK;
+    if(bytes.length!==expected)return res.status(400).json({ok:false,error:'Chunk length does not match the expected size.'});
+    const digest=crypto.createHash('sha256').update(bytes).digest('hex');
+    const supplied=String(req.get('x-chunk-sha256')||'');
+    if(supplied!==digest)return res.status(400).json({ok:false,error:'Chunk integrity check failed. Please retry this chunk.'});
+    const objectPath=user.id+'/'+id+'/'+String(index).padStart(4,'0');
+    const {error:uploadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).upload(objectPath,bytes,{contentType:'application/octet-stream',upsert:true});
+    if(uploadError)throw uploadError;
+    const {error:rowError}=await supabaseAdmin.from('phone_transfer_chunks').upsert({transfer_id:id,chunk_index:index,object_path:objectPath,size_bytes:bytes.length,sha256:digest},{onConflict:'transfer_id,chunk_index'});
+    if(rowError)throw rowError;
+    return res.json({ok:true,index,received:bytes.length});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not store this transfer chunk. Retry the chunk.'});}
+});
+app.post('/api/transfers/:transferId/complete',rateLimit(30,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const id=req.params.transferId;
+  try{
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,chunk_count,status').eq('id',id).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
+    if(transfer.status==='queued'||transfer.status==='receiving')return res.json({ok:true,status:transfer.status});
+    if(transfer.status!=='uploading')return res.status(409).json({ok:false,error:'This transfer cannot be queued.'});
+    const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index').eq('transfer_id',id);
+    if(chunkError)throw chunkError;
+    if((chunks||[]).length!==transfer.chunk_count)return res.status(409).json({ok:false,error:'Some chunks are still missing. Retry the upload.'});
+    const {data:queued,error:queueError}=await supabaseAdmin.from('phone_transfers').update({status:'queued',updated_at:new Date().toISOString()}).eq('id',id).eq('user_id',user.id).eq('status','uploading').select('id').maybeSingle();
+    if(queueError)throw queueError;
+    if(!queued)return res.status(409).json({ok:false,error:'Transfer state changed. Refresh and try again.'});
+    return res.json({ok:true,status:'queued'});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not queue the transfer.'});}
+});
+app.delete('/api/transfers/:transferId',rateLimit(20,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  try{
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,status').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
+    if(transfer.status!=='uploading')return res.status(409).json({ok:false,error:'Only an upload that has not been queued can be cancelled.'});
+    const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',transfer.id);
+    const paths=(chunks||[]).map(c=>c.object_path);
+    const {data:cancelled,error:cancelError}=await supabaseAdmin.from('phone_transfers').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',transfer.id).eq('user_id',user.id).eq('status','uploading').select('id').maybeSingle();
+    if(cancelError)throw cancelError;
+    if(!cancelled)return res.status(409).json({ok:false,error:'Transfer state changed before cancellation.'});
+    if(paths.length)await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).remove(paths);
+    await supabaseAdmin.from('phone_transfer_chunks').delete().eq('transfer_id',transfer.id);
+    return res.json({ok:true,cancelled:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not cancel this upload.'});}
+});
+app.get('/api/transfers/:transferId',rateLimit(120,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  try{
+    const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,size_bytes,status,error_message,created_at,completed_at').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(404).json({ok:false,error:'Transfer not found.'});
+    return res.json({ok:true,transfer:{id:data.id,name:data.file_name,size:Number(data.size_bytes),status:data.status,error:data.error_message,createdAt:data.created_at,completedAt:data.completed_at}});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not check transfer status.'});}
+});
+
+async function requireAgent(req,res,deviceId){
+  const token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
+  if(!token||! /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId||'')){res.status(401).json({ok:false,error:'Device authentication required.'});return null;}
+  const tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+  try{
+    const {data:agent,error}=await supabaseAdmin.from('device_agents').select('device_id').eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).maybeSingle();
+    if(error)throw error;
+    if(!agent){res.status(401).json({ok:false,error:'Device authentication failed.'});return null;}
+    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,user_id').eq('id',deviceId).maybeSingle();
+    if(deviceError)throw deviceError;
+    if(!device){res.status(401).json({ok:false,error:'Paired computer no longer exists.'});return null;}
+    return {deviceId:device.id,userId:device.user_id};
+  }catch(_){res.status(503).json({ok:false,error:'Could not authenticate the computer.'});return null;}
+}
+app.post('/api/agent/transfers/claim',rateLimit(300,60*1000),rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const agent=await requireAgent(req,res,String(req.body?.deviceId||''));if(!agent)return;
+  try{
+    const staleBefore=new Date(Date.now()-10*60*1000).toISOString();
+    const {error:staleError}=await supabaseAdmin.from('phone_transfers').update({status:'queued',updated_at:new Date().toISOString()}).eq('device_id',agent.deviceId).eq('status','receiving').lt('updated_at',staleBefore);
+    if(staleError)throw staleError;
+    const {data:rows,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,mime_type,size_bytes,chunk_size,chunk_count').eq('device_id',agent.deviceId).eq('status','queued').order('created_at',{ascending:true}).limit(1);
+    if(error)throw error;
+    const transfer=rows?.[0];if(!transfer)return res.json({ok:true,transfer:null});
+    const {data:claimed,error:claimError}=await supabaseAdmin.from('phone_transfers').update({status:'receiving',updated_at:new Date().toISOString()}).eq('id',transfer.id).eq('device_id',agent.deviceId).eq('status','queued').select('id,file_name,mime_type,size_bytes,chunk_size,chunk_count').maybeSingle();
+    if(claimError)throw claimError;
+    if(!claimed)return res.json({ok:true,transfer:null});
+    const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,size_bytes,sha256').eq('transfer_id',transfer.id).order('chunk_index',{ascending:true});
+    if(chunkError)throw chunkError;
+    return res.json({ok:true,transfer:{id:claimed.id,fileName:claimed.file_name,mimeType:claimed.mime_type,sizeBytes:Number(claimed.size_bytes),chunkSize:claimed.chunk_size,chunkCount:claimed.chunk_count,chunks:(chunks||[]).map(c=>({index:c.chunk_index,sizeBytes:c.size_bytes,sha256:c.sha256}))}});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not claim the next file transfer.'});}
+});
+app.get('/api/agent/transfers/:transferId/chunks/:index',rateLimit(400,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const agent=await requireAgent(req,res,String(req.query.deviceId||''));if(!agent)return;
+  const index=Number(req.params.index);
+  if(!Number.isInteger(index)||index<0)return res.status(400).json({ok:false,error:'Invalid chunk index.'});
+  try{
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id').eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('status','receiving').maybeSingle();
+    if(error)throw error;
+    if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found or no longer active.'});
+    const {data:chunk,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path,sha256,size_bytes').eq('transfer_id',transfer.id).eq('chunk_index',index).maybeSingle();
+    if(chunkError)throw chunkError;
+    if(!chunk)return res.status(404).json({ok:false,error:'Transfer chunk not found.'});
+    const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
+    if(downloadError||!data)throw downloadError||new Error('Chunk is missing.');
+    const buffer=Buffer.from(await data.arrayBuffer());
+    if(buffer.length!==chunk.size_bytes||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Stored chunk failed integrity verification.');
+    const {error:touchError}=await supabaseAdmin.from('phone_transfers').update({updated_at:new Date().toISOString()}).eq('id',transfer.id).eq('device_id',agent.deviceId).eq('status','receiving');
+    if(touchError)throw touchError;
+    res.setHeader('Content-Type','application/octet-stream');res.setHeader('Content-Length',String(buffer.length));res.setHeader('X-Chunk-SHA256',chunk.sha256);
+    return res.status(200).send(buffer);
+  }catch(_){return res.status(503).json({ok:false,error:'Could not retrieve this file chunk.'});}
+});
+app.post('/api/agent/transfers/:transferId/complete',rateLimit(60,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
+  const agent=await requireAgent(req,res,String(req.body?.deviceId||''));if(!agent)return;
+  const status=req.body?.status;
+  if(!['completed','failed'].includes(status))return res.status(400).json({ok:false,error:'Invalid transfer result.'});
+  try{
+    const changes={status,updated_at:new Date().toISOString(),error_message:status==='failed'?String(req.body?.error||'Transfer failed').slice(0,240):null,...(status==='completed'?{completed_at:new Date().toISOString()}: {})};
+    const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('status','receiving').select('id').maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(404).json({ok:false,error:'Transfer not found or already finished.'});
+    if(['completed','failed'].includes(status)){
+      const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',req.params.transferId);
+      const paths=(chunks||[]).map(c=>c.object_path);
+      if(paths.length)await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).remove(paths);
+      await supabaseAdmin.from('phone_transfer_chunks').delete().eq('transfer_id',req.params.transferId);
+    }
+    return res.json({ok:true,status});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not save the transfer result.'});}
 });
 
 // Owner-scoped device list for the main PhoneBridge workspace.

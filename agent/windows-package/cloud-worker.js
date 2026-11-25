@@ -9,6 +9,7 @@ const { execFileSync } = require('node:child_process');
 const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, tokenPattern } = require('./credential-store');
 const { runReconnectLoop } = require('./reconnect-loop');
 const { createLocalPairingBridge } = require('./local-pairing-bridge');
+const { receiveTransfer } = require('./file-transfer');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -86,6 +87,24 @@ function postJson(urlPath, body, token) {
   });
 }
 
+function getBinary(urlPath,token){
+  return new Promise((resolve,reject)=>{
+    const url=new URL(urlPath,cloudUrl);
+    if(url.protocol!=='https:')return reject(new Error('Only HTTPS cloud endpoints are allowed.'));
+    const req=https.get(url,{headers:{authorization:'Bearer '+token}},res=>{
+      if(res.statusCode<200||res.statusCode>=300){
+        const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>{let data={};try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{}const error=new Error(data.error||'Could not download a transfer chunk.');error.statusCode=res.statusCode;reject(error)});return;
+      }
+      const length=Number(res.headers['content-length']);
+      if(Number.isFinite(length)&&length>8*1024*1024){res.destroy();return reject(new Error('Transfer chunk exceeds the 8 MB limit.'));}
+      const chunks=[];let bytes=0;
+      res.on('data',chunk=>{bytes+=chunk.length;if(bytes>8*1024*1024){chunks.length=0;res.destroy();req.destroy(new Error('Transfer chunk exceeds the 8 MB limit.'));return;}chunks.push(chunk);});
+      res.on('end',()=>resolve(Buffer.concat(chunks,bytes)));
+    });
+    req.setTimeout(60000,()=>req.destroy(new Error('Transfer chunk request timed out.')));
+    req.on('error',reject);
+  });
+}
 
 let nextPairingCredentials=null;
 let pairingWaiter=null;
@@ -130,7 +149,22 @@ async function main() {
     credentials,
     claim:async current=>{
       if(nextPairingCredentials){const replacement=nextPairingCredentials;nextPairingCredentials=null;return{credentials:replacement};}
-      return postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+      await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+      const pending=await postJson('/api/agent/transfers/claim',{deviceId:current.deviceId},current.agentToken);
+      if(pending?.transfer){
+        const transfer=pending.transfer;
+        await receiveTransfer({
+          transfer,
+          baseDir:path.join(os.homedir(),'Documents','PhoneBridge','Incoming'),
+          downloadChunk:async(id,index)=>{
+            const bytes=await getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
+            await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+            return bytes;
+          },
+          complete:result=>postJson('/api/agent/transfers/'+encodeURIComponent(transfer.id)+'/complete',{deviceId:current.deviceId,...result},current.agentToken)
+        });
+      }
+      return {ok:true};
     },
     reEnroll:async()=>waitForPairingCredentials(),
     sleep:ms=>new Promise(resolve=>setTimeout(resolve,ms)),

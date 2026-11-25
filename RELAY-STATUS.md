@@ -1,21 +1,19 @@
 # PhoneBridge cloud workspace status
 
 ## Customer flow
+- The signed-in PhoneBridge dashboard remains the main customer app. No Agent Console, terminal, arbitrary remote command interface, or separate agent UI is exposed.
+- The phone approves a six-digit computer-generated pairing code. Codes expire after five minutes and are single-use.
+- The Windows connector runs silently in the background and uses outbound HTTPS only. It retains existing per-device credentials and reports authenticated online/offline status.
 
-- The customer dashboard is the main signed-in experience. It keeps the original PhoneBridge branding and navigation; Agent Console and remote task tools are not exposed.
-- The signed-in phone generates a short-lived six-digit code. The user enters it in the Windows Agent console to bind that computer to the phone's account.
-- Pairing codes expire after five minutes and are single-use. Only a keyed hash is stored. The per-device token is returned to the Agent after redemption and is stored locally with Windows user-only permissions.
-- The background connector is retained for enrollment and heartbeat status. Existing installed credentials continue to work; old command-poll requests update status only.
+## Phone-to-PC file transfer
+- The phone starts an account-owned transfer assigned to one online paired Windows computer.
+- Files are split into 8 MiB chunks. Each chunk is SHA-256 checked, stored in the private `transfer-chunks` bucket, and can be retried independently.
+- The paired connector claims only transfers assigned to its own device ID, downloads each chunk over HTTPS, verifies it again, and assembles the file through a temporary file before atomic rename.
+- Completed files are saved under `Documents\PhoneBridge\Incoming`. The connector cannot select arbitrary paths or execute arbitrary computer tasks.
+- Maximum file size is 2 GiB. The separate private cloud Drive retains its 250 MiB per-file and 10 GiB per-account limits.
+- Migration `005_resumable_pc_file_transfers.sql` is required after migrations 001 through 004. Render does not apply database migrations.
 
 ## Feature boundary
-
-- The customer workspace shows paired computers and online/offline status. Computer task controls and task history have been removed, and the cloud task APIs return 410.
-- The legacy command tables and RPC migration remain in the repository for compatibility, but the cloud server and Agent do not use them. No command rows are deleted.
-- File transfer, cloud Drive, synchronization, media streaming, screen viewing, mouse control, and keyboard control are not implemented in this cloud release. The local backup's corresponding endpoints depend on the ThinkPad-hosted server and are not enabled in the cloud application.
-
-## Database and release boundary
-
-- Migrations 001, 002, and 003 remain the ordered database chain. Phone-generated pairing uses the existing `device_enrollments` table from migration 002; no migration 004 is required.
-- The Windows Agent redeems the phone-generated code through `/api/agent/enroll`; the cloud reports a computer Online only after a recent authenticated Agent heartbeat.
-- Render does not run migrations. Verify that the existing production database has migrations 001 through 003 before relying on pairing and device status.
-- Tests can verify code paths and source consistency, but they cannot prove production enrollment or ThinkPad authentication. Real pairing and status require production migration review, deployment, and live verification.
+- The cloud task APIs remain disabled. Legacy task tables and RPC migrations remain for compatibility but are not used by the connector.
+- Screen streaming, remote input, audio/video streaming, and full folder synchronization remain unavailable in this cloud release.
+- Real production transfers require migration 005 to be applied, the updated Windows connector package to be installed, deployment, and an end-to-end test with a real file.
