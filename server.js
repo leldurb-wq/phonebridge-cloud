@@ -35,7 +35,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:["'self'"],
-      scriptSrc:["'self'","'unsafe-inline'",'https://esm.sh'],
+      scriptSrc:["'self'","'unsafe-inline'",'https://esm.sh','https://cdn.jsdelivr.net'],
       styleSrc:["'self'","'unsafe-inline'"],
       imgSrc:["'self'",'data:','blob:','https:'],
       connectSrc:["'self'",'http://127.0.0.1:32145','https://*.supabase.co','wss://*.supabase.co'],

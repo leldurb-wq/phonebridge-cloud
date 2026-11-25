@@ -162,6 +162,14 @@ test('cloud file transfer routes store private owner-scoped files and enforce pe
  assert.doesNotMatch(page,/X-PB-Account-Token/);
 });
 
+test('video and audio transfers infer browser media MIME types from file extensions',()=>{
+ const page=html();
+ assert.match(page,/function fileMimeType\(name,fallback=''/);
+ for(const mapping of ["mp4:'video/mp4'","m4v:'video/mp4'","mov:'video/quicktime'","webm:'video/webm'","mp3:'audio/mpeg'","m4a:'audio/mp4'"])assert.ok(page.includes(mapping),'MIME mapping '+mapping);
+ assert.match(page,/type:fileMimeType\(file\.name,file\.type\)/);
+ assert.match(page,/type:fileMimeType\(item\.name,item\.type\)/);
+ assert.match(page,/wmv.*flv.*f4v.*ts.*m2ts/);
+});
 test('Drive and transfer history share previews for text and common Office formats',()=>{
  const page=html();
  assert.match(page,/async function renderFilePreview\(name,url,stage\)/);

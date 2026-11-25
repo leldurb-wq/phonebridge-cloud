@@ -1469,7 +1469,9 @@ async function openFilePreview(id){
  catch(error){$('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');$('previewStatus').textContent='Preview unavailable · original file is safe to download'}
 }
 $('previewClose').onclick=closeFilePreview;$('previewOverlay').addEventListener('click',e=>{if(e.target===$('previewOverlay'))closeFilePreview()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('previewOverlay').classList.contains('hidden'))closeFilePreview()});
-function fileKind(name){const e=(name.split('.').pop()||'').toLowerCase();if(['jpg','jpeg','png','gif','webp','heic','heif','bmp','tif','tiff'].includes(e))return'images';if(['mp4','mov','m4v','avi','mkv','webm','3gp','mpeg','mpg'].includes(e))return'videos';if(['mp3','m4a','wav','aac','flac','ogg','opus'].includes(e))return'audio';if(['pdf','doc','docx','xls','xlsx','xlsm','ppt','pptx','txt','rtf','csv','odt','ods','odp'].includes(e))return'documents';return'other'}
+function fileExtension(name){return(name.split('.').pop()||'').toLowerCase()}
+function fileKind(name){const e=fileExtension(name);if(['jpg','jpeg','png','gif','webp','heic','heif','bmp','tif','tiff','avif'].includes(e))return'images';if(['mp4','m4v','mov','webm','ogv','3gp','3g2','mpeg','mpg','mpe','m2v','avi','mkv','wmv','flv','f4v','ts','m2ts','mts','vob'].includes(e))return'videos';if(['mp3','m4a','wav','aac','flac','ogg','opus','oga','wma','aiff','aif'].includes(e))return'audio';if(['pdf','doc','docx','xls','xlsx','xlsm','ppt','pptx','txt','rtf','csv','odt','ods','odp'].includes(e))return'documents';return'other'}
+function fileMimeType(name,fallback=''){const e=fileExtension(name),types={mp4:'video/mp4',m4v:'video/mp4',mov:'video/quicktime',webm:'video/webm',ogv:'video/ogg',ogg:'audio/ogg',oga:'audio/ogg',mp3:'audio/mpeg',m4a:'audio/mp4',aac:'audio/aac',wav:'audio/wav',flac:'audio/flac',opus:'audio/opus',pdf:'application/pdf',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp',avif:'image/avif',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation'};return types[e]||(!fallback||fallback==='application/octet-stream'?'application/octet-stream':fallback)}
 function renderDrive(){const q=$('driveSearch').value.trim().toLowerCase(),folder=$('driveFolder').value,filter=$('driveFilter').value,sort=$('driveSort').value;let a=driveFiles.filter(f=>(!q||f.name.toLowerCase().includes(q))&&(folder==='*'||(folder===''?!f.folder:f.folder===folder))&&(filter==='all'||(filter==='favorites'?f.favorite:fileKind(f.name)===filter)));a.sort((x,y)=>sort==='oldest'?x.modified-y.modified:sort==='name'?x.name.localeCompare(y.name,undefined,{sensitivity:'base'}):sort==='largest'?y.size-x.size:y.modified-x.modified);say('fileCount',a.length+' of '+driveFiles.length+' files');$('files').innerHTML=a.length?a.map(f=>'<div class="file"><input type="checkbox" data-select="'+encodeURIComponent(f.id)+'" aria-label="Select '+esc(f.name)+'" style="width:18px;height:18px;flex:none"><div class="file-icon">'+({images:'IMG',videos:'VID',audio:'AUD',documents:'DOC',other:'FILE'}[fileKind(f.name)])+'</div><div class="file-name"><b title="'+esc(f.name)+'">'+esc(f.name)+(f.favorite?' [STAR]':'')+'</b><small>'+size(f.size)+' | '+esc(f.folder||'Unfiled')+' | '+new Date(f.modified).toLocaleString()+'</small></div><div class="file-actions"><button data-preview="'+encodeURIComponent(f.id)+'">Preview</button><button data-fav="'+encodeURIComponent(f.id)+'">'+(f.favorite?'Starred':'Star')+'</button><button data-move="'+encodeURIComponent(f.id)+'">Move</button><button data-dl="'+encodeURIComponent(f.id)+'">Download</button><button class="del" data-del="'+encodeURIComponent(f.id)+'">Delete</button></div></div>').join(''):'<div class="empty"><b>No matching files</b>Try another search or folder, or upload a file to Drive.</div>'}
 
 let audioQueue=[],videoQueue=[],audioIndex=-1,videoIndex=-1,audioFilter='all',videoFilter='all';
@@ -1568,7 +1570,7 @@ async function sendFilesToPc(fileList){
   const file=files[fileIndex],row=$('pc-transfer-'+fileIndex);let transferId='';
   try{
    row.lastElementChild.textContent='Starting secure transfer…';
-   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId,name:file.name,size:file.size,type:file.type||'application/octet-stream'})});
+   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId,name:file.name,size:file.size,type:fileMimeType(file.name,file.type)})});
    const transfer=startedTransfer.transfer;transferId=transfer.id;
    await uploadTransferChunks(transferId,transfer,file,(bytes,end)=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update()});
    try{await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(error){const state=await api('/api/transfers/'+transferId);if(!['queued','receiving'].includes(state.transfer.status))throw error}
@@ -1615,7 +1617,7 @@ async function sendFilesToPhone(fileList){
  for(let i=0;i<files.length;i++){
   const file=files[i],row=$('pc-transfer-'+i);let transferId='';
   try{
-   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:'pc_to_phone',targetClientId,deviceId:computer.id,name:file.name,size:file.size,type:file.type||'application/octet-stream'})});
+   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:'pc_to_phone',targetClientId,deviceId:computer.id,name:file.name,size:file.size,type:fileMimeType(file.name,file.type)})});
    const transfer=startedTransfer.transfer;transferId=transfer.id;
    await uploadTransferChunks(transferId,transfer,file,bytes=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(sent/Math.max(1,total)*100)+'%';update()});
    await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -1662,7 +1664,7 @@ async function fetchTransferBlob(item,clientId=''){
     const batch=await Promise.all(Array.from({length:Math.min(3,item.chunkCount-start)},(_,offset)=>getChunk(start+offset)));
     for(const bytes of batch)await writable.write(bytes);
    }
-   await writable.close();return await handle.getFile();
+   await writable.close();const saved=await handle.getFile(),mime=fileMimeType(item.name,item.type);return saved.type===mime?saved:new Blob([saved],{type:mime});
   }catch(error){
    if(writable)try{await writable.abort()}catch{}
    throw Error('PhoneBridge could not save this file in browser storage: '+error.message);
@@ -1671,7 +1673,7 @@ async function fetchTransferBlob(item,clientId=''){
  const parts=new Array(item.chunkCount);let next=0;
  async function worker(){while(true){const index=next++;if(index>=item.chunkCount)return;parts[index]=await getChunk(index)}}
  await Promise.all(Array.from({length:Math.min(3,item.chunkCount)},worker));
- return new Blob(parts,{type:item.type||'application/octet-stream'});
+ return new Blob(parts,{type:fileMimeType(item.name,item.type)});
 }
 function downloadTransferBlob(blob,name){
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name||'PhoneBridge-file';document.body.appendChild(a);a.click();a.remove();
