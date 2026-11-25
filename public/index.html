@@ -664,8 +664,9 @@ body[data-page]:before{opacity:.13;background-image:linear-gradient(#7ddcff12 1p
 .status{background:#0b302c;border-color:#1c6558;color:#7bf0cf}
 .phonebridge-workspace{margin:0;padding:0 34px 50px;border:0;border-radius:0;background:transparent;min-height:calc(100vh - 78px)}
 .phonebridge-workspace>p{display:none}
-/* Retain legacy navigation targets for compatibility, but remove the old sidebar and bottom nav from the interface. */
+/* Retire the old navigation, media-library screens and legacy footer from the customer interface. Keep their DOM hooks intact for compatibility. */
 .phonebridge-workspace>.nav,.phonebridge-workspace>.mobile-tabbar{display:none!important}
+#audioPlayerPage,#videoPlayerPage,footer.footer{display:none!important}
 .nav{position:fixed;z-index:90;left:0;top:0;bottom:0;width:260px;display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-y:auto;overflow-x:hidden;padding:98px 15px 170px;background:#081526;border-right:1px solid #1d3855;box-shadow:12px 0 38px #0002;scrollbar-width:thin}
 .nav-group-label{padding:15px 12px 5px;color:#6283a5;font-size:9px;font-weight:800;letter-spacing:1.8px}
 .nav a{display:flex;align-items:center;gap:12px;min-height:43px;padding:10px 13px;border:1px solid transparent;border-radius:11px;color:#a8bfd7;font-size:12px;font-weight:650;letter-spacing:0;white-space:nowrap}
