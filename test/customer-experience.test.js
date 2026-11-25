@@ -31,6 +31,15 @@ test('post-pairing opens the cinematic feature workspace only after a fresh onli
  assert.match(page,/body\[data-page="computer"\] #workspace>#deviceManager/);
 });
 
+test('workspace feature pages share a back-to-workspace control',()=>{
+ const page=html();
+ assert.match(page,/<div class="workspace-backbar" aria-label="Workspace navigation">[\s\S]*?href="#overview" data-page-link="overview" aria-label="Back to PhoneBridge workspace"[\s\S]*?BACK TO WORKSPACE/);
+ const backStyle=page.slice(page.indexOf('id="pbx-workspace-back-navigation"'),page.indexOf('</style>',page.indexOf('id="pbx-workspace-back-navigation"')));
+ for(const route of ['transfer','library','computer','help'])assert.ok(backStyle.includes('body[data-page="'+route+'"] .workspace-backbar'),route+' page displays the back control');
+ assert.match(page,/document\.querySelectorAll\('\[data-page-link\]'\)\.forEach\(a=>a\.addEventListener\('click',e=>\{e\.preventDefault\(\);showPage\(a\.dataset\.pageLink\)\}\)\)/);
+ assert.match(backStyle,/\.workspace-back-button\{[\s\S]*background:linear-gradient\(120deg,#102b43,#0a1a2d\)/);
+});
+
 test('cinematic workspace uses a full-bleed dark outer shell without light page gutters',()=>{
  const page=html();const theme=page.slice(page.indexOf('id="pbx-workspace-dark-surroundings"'),page.indexOf('</style>',page.indexOf('id="pbx-workspace-dark-surroundings"')));
  assert.match(theme,/html\{background:#050914!important\}/);
