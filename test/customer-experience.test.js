@@ -88,8 +88,8 @@ test('the retained customer routing helper still distinguishes anonymous, signed
  assert.equal(resolveCustomerView({user:{id:'account-a'}},true),'recovery');
 });
 
-test('main PhoneBridge pages clearly mark unsupported cloud features and retain account settings on the shared auth client',()=>{
- const page=html();assert.match(page,/File transfer, Drive, synchronization, media streaming, screen viewing and remote input are not available/);
+test('main PhoneBridge pages mark cloud file transfer and private Drive as available while retaining unsupported feature notices',()=>{
+ const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Sync automation, media streaming, screen viewing and remote input are not available/);
  assert.match(page,/updateUser\(\{email\}\)/);assert.match(page,/updateUser\(\{password\}\)/);
 });
 
@@ -132,6 +132,16 @@ test('PhoneBridge pairing generates the code on the computer and asks the phone 
  const page=html();assert.match(page,/id="pairingCodeDisplay"/);assert.match(page,/Pair this computer/);assert.match(page,/http:\/\/127\.0\.0\.1:32145\/pairing\/start/);
  assert.match(page,/id="phonePairCode"/);assert.match(page,/id="approvePair"/);assert.ok(page.includes("/api/enrollments/approve"));
  assert.match(page,/fresh secure check-in/);const pairing=page.slice(page.indexOf('id="phonePanel"'),page.indexOf('id="workspace"'));assert.doesNotMatch(pairing,/phone-generated code|Agent window/);
+});
+
+test('cloud file transfer routes store private owner-scoped files and enforce per-file and account quotas',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
+ assert.match(server,/app\.get\('\/api\/files'/);assert.match(server,/app\.post\('\/api\/upload'/);assert.match(server,/app\.get\('\/api\/download'/);assert.match(server,/app\.patch\('\/api\/files'/);assert.match(server,/app\.delete\('\/api\/files'/);
+ assert.match(server,/const FILE_BUCKET='user-files'/);assert.match(server,/const FILE_LIMIT=250\*1024\*1024/);assert.match(server,/const ACCOUNT_STORAGE_LIMIT=10\*1024\*1024\*1024/);
+ assert.match(server,/storage\.from\(FILE_BUCKET\)\.upload/);assert.match(server,/storage\.from\(FILE_BUCKET\)\.download/);assert.match(server,/\.eq\('id',id\)\.eq\('user_id',user\.id\)/);
+ assert.match(page,/pathOnly==='\/api\/files'/);assert.match(page,/pathOnly==='\/api\/upload'&&method==='POST'/);assert.match(page,/pathOnly==='\/api\/download'&&method==='GET'/);
+ assert.match(page,/x\.setRequestHeader\('Authorization','Bearer '\+accountToken\)/);assert.match(page,/fetch\('\/api\/download\?id='/);
+ assert.doesNotMatch(page,/X-PB-Account-Token/);
 });
 
 function readZipEntries(zipPath){

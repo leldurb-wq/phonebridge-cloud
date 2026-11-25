@@ -123,6 +123,137 @@ async function requireOwner(req, res) {
   }
 }
 
+// Owner-authenticated cloud file storage. Objects are private and always scoped
+// to the signed-in account; the service-role key never leaves this server.
+const FILE_BUCKET='user-files';
+const FILE_LIMIT=250*1024*1024;
+const ACCOUNT_STORAGE_LIMIT=10*1024*1024*1024;
+function cleanFileName(value){
+  const name=String(value||'').normalize('NFKC').replaceAll(String.fromCharCode(92),'/').split('/').pop().replace(/[\u0000-\u001f\u007f]/g,'_').replace(/^\.+/,'').trim().slice(0,180);
+  return name||'upload';
+}
+async function readUpload(req){
+  const chunks=[];let total=0;
+  return await new Promise((resolve,reject)=>{
+    req.on('data',chunk=>{
+      total+=chunk.length;
+      if(total>FILE_LIMIT){reject(Object.assign(new Error('Files must be 250 MB or smaller.'),{status:413}));req.resume();return}
+      chunks.push(chunk);
+    });
+    req.on('end',()=>resolve(Buffer.concat(chunks,total)));
+    req.on('error',reject);
+    req.on('aborted',()=>reject(new Error('Upload was interrupted.')));
+  });
+}
+async function getUserStorageUsage(userId){
+  let total=0,from=0;
+  while(true){
+    const {data,error}=await supabaseAdmin.from('user_files').select('size_bytes').eq('user_id',userId).range(from,from+999);
+    if(error)throw error;
+    const rows=data||[];total+=rows.reduce((sum,row)=>sum+Number(row.size_bytes||0),0);
+    if(rows.length<1000)break;
+    from+=1000;
+  }
+  return total;
+}
+app.get('/api/files',rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  try{
+    const {data,error}=await supabaseAdmin.from('user_files').select('id,original_name,mime_type,size_bytes,folder,is_favorite,created_at,updated_at').eq('user_id',user.id).order('updated_at',{ascending:false}).limit(2000);
+    if(error)throw error;
+    const files=(data||[]).map(f=>({id:f.id,name:f.original_name,size:Number(f.size_bytes||0),type:f.mime_type||'application/octet-stream',folder:f.folder||'',favorite:!!f.is_favorite,modified:Date.parse(f.updated_at||f.created_at)}));
+    const folders=[...new Set(files.map(f=>f.folder).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const used=await getUserStorageUsage(user.id);
+    return res.json({ok:true,files,folders,storage:{used,limit:ACCOUNT_STORAGE_LIMIT}});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not load your files from private cloud storage.'});}
+});
+app.post('/api/upload',rateLimit(30,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  const declared=Number(req.get('content-length')||0);
+  if(declared>FILE_LIMIT)return res.status(413).json({ok:false,error:'Files must be 250 MB or smaller.'});
+  try{
+    const name=cleanFileName(req.query.name);
+    const type=String(req.get('content-type')||'application/octet-stream').split(';')[0].slice(0,120);
+    const buffer=await readUpload(req);
+    if(!buffer.length)return res.status(400).json({ok:false,error:'Choose a file before uploading.'});
+    const used=await getUserStorageUsage(user.id);
+    if(used+buffer.length>ACCOUNT_STORAGE_LIMIT)return res.status(413).json({ok:false,error:'Your 10 GB PhoneBridge storage limit would be exceeded.'});
+    const id=crypto.randomUUID();
+    const objectPath=user.id+'/'+id+'/'+name;
+    const {error:uploadError}=await supabaseAdmin.storage.from(FILE_BUCKET).upload(objectPath,buffer,{contentType:type,upsert:false});
+    if(uploadError)throw uploadError;
+    const now=new Date().toISOString();
+    const {data,error}=await supabaseAdmin.from('user_files').insert({id,user_id:user.id,object_path:objectPath,original_name:name,mime_type:type,size_bytes:buffer.length,folder:'',created_at:now,updated_at:now}).select('id').single();
+    if(error){await supabaseAdmin.storage.from(FILE_BUCKET).remove([objectPath]);throw error}
+    return res.status(201).json({ok:true,id:data.id,name,size:buffer.length});
+  }catch(error){
+    if(error.status)return res.status(error.status).json({ok:false,error:error.message});
+    return res.status(503).json({ok:false,error:'Upload failed. Check your private storage bucket and try again.'});
+  }
+});
+app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','private, no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  const id=String(req.query.id||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
+  try{
+    const {data:file,error}=await supabaseAdmin.from('user_files').select('object_path,original_name,mime_type,size_bytes').eq('id',id).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).download(file.object_path);
+    if(downloadError||!data)throw downloadError||new Error('File data is missing.');
+    const buffer=Buffer.from(await data.arrayBuffer());
+    const safeName=cleanFileName(file.original_name);
+    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');
+    res.setHeader('Content-Length',String(buffer.length));
+    res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(safeName));
+    return res.status(200).send(buffer);
+  }catch(_){return res.status(503).json({ok:false,error:'Could not download this file. Please try again.'});}
+});
+app.patch('/api/files',rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  const id=String(req.body?.id||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
+  const changes={updated_at:new Date().toISOString()};
+  if(typeof req.body?.favorite==='boolean')changes.is_favorite=req.body.favorite;
+  if(typeof req.body?.folder==='string'){
+    const folder=req.body.folder.trim();
+    if(folder.length>80||/[\\\\/\\x00-\\x1f]/.test(folder))return res.status(400).json({ok:false,error:'Folder names must be 80 characters or fewer and cannot contain slashes.'});
+    changes.folder=folder;
+  }
+  if(Object.keys(changes).length===1)return res.status(400).json({ok:false,error:'No file changes were supplied.'});
+  try{
+    const {data,error}=await supabaseAdmin.from('user_files').update(changes).eq('id',id).eq('user_id',user.id).select('id').maybeSingle();
+    if(error)throw error;
+    if(!data)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    return res.json({ok:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not update this file.'});}
+});
+app.delete('/api/files',rateLimit(20,10*60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  const id=String(req.query.id||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
+  try{
+    const {data:file,error:findError}=await supabaseAdmin.from('user_files').select('object_path').eq('id',id).eq('user_id',user.id).maybeSingle();
+    if(findError)throw findError;
+    if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    const {error:removeError}=await supabaseAdmin.storage.from(FILE_BUCKET).remove([file.object_path]);
+    if(removeError)throw removeError;
+    const {error:deleteError}=await supabaseAdmin.from('user_files').delete().eq('id',id).eq('user_id',user.id);
+    if(deleteError)throw deleteError;
+    return res.json({ok:true,deleted:true});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not delete this file from private storage.'});}
+});
+
 // Owner-scoped device list for the main PhoneBridge workspace.
 app.get('/api/devices', rateLimit(60,60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
