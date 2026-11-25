@@ -1412,7 +1412,16 @@ $('legacyDeviceList').onclick=async e=>{
  catch(err){say('deviceMsg',err.message);btn.disabled=false}
 };
 let driveFiles=[],driveFolders=[''],pcPairedDevices=[];
-function previewUrl(id){return '/api/preview?id='+encodeURIComponent(id)}
+const drivePreviewUrls=new Map();
+async function authenticatedDrivePreviewUrl(id,name){
+ const cached=drivePreviewUrls.get(id);if(cached)return cached;
+ const response=await fetch('/api/download?id='+encodeURIComponent(id),{headers:headers(),credentials:'same-origin',cache:'no-store'});
+ if(!response.ok){let data={};try{data=await response.json()}catch{}throw Error(data.error||'Could not load this media file ('+response.status+').')}
+ const original=await response.blob(),mime=fileMimeType(name,original.type),blob=new Blob([original],{type:mime}),url=URL.createObjectURL(blob);
+ drivePreviewUrls.set(id,url);
+ while(drivePreviewUrls.size>6){const oldest=drivePreviewUrls.keys().next().value,oldUrl=drivePreviewUrls.get(oldest);drivePreviewUrls.delete(oldest);URL.revokeObjectURL(oldUrl)}
+ return url;
+}
 function closeFilePreview(){const box=$('previewOverlay'),stage=$('previewStage');stage.querySelectorAll('video,audio').forEach(m=>{m.pause();m.removeAttribute('src');m.load()});stage.replaceChildren();box.classList.add('hidden');document.body.classList.remove('preview-open')}
 function loadPreviewLibrary(src,ready){
  if(ready())return Promise.resolve();
@@ -1465,9 +1474,9 @@ async function renderFilePreview(name,url,stage){
 function showPreview(){ $('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
 async function openFilePreview(id){
  const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}
- const url=previewUrl(id);$('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' · '+(f.folder||'Unfiled')+' · Stored in your private cloud Drive';$('previewDownload').href='/api/download?id='+encodeURIComponent(id);$('previewDownload').download=f.name;$('previewStatus').textContent='Preparing preview…';showPreview();
- try{await renderFilePreview(f.name,url,$('previewStage'));$('previewStatus').textContent='Preview ready · Download original is always available'}
- catch(error){$('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');$('previewStatus').textContent='Preview unavailable · original file is safe to download'}
+ $('previewTitle').textContent=f.name;$('previewMeta').textContent=size(f.size)+' | '+(f.folder||'Unfiled')+' | Stored in your private cloud Drive';$('previewDownload').download=f.name;$('previewStatus').textContent='Preparing preview...';showPreview();
+ try{const url=await authenticatedDrivePreviewUrl(id,f.name);$('previewDownload').href=url;await renderFilePreview(f.name,url,$('previewStage'));$('previewStatus').textContent='Preview ready | Download original is always available'}
+ catch(error){$('previewStage').replaceChildren();previewTextBlock($('previewStage'),'Preview could not be generated: '+error.message+'\n\nYou can still download the original file.');$('previewStatus').textContent='Preview unavailable | original file is safe to download'}
 }
 $('previewClose').onclick=closeFilePreview;$('previewOverlay').addEventListener('click',e=>{if(e.target===$('previewOverlay'))closeFilePreview()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('previewOverlay').classList.contains('hidden'))closeFilePreview()});
 function fileExtension(name){return(name.split('.').pop()||'').toLowerCase()}
@@ -1487,11 +1496,18 @@ function renderMediaList(kind){
  target.innerHTML=rows.length?rows.map((f,i)=>'<button type="button" class="media-track '+((isAudio?audioQueue[audioIndex]?.id:videoQueue[videoIndex]?.id)===f.id?'is-playing':'')+'" data-'+kind+'-play="'+encodeURIComponent(f.id)+'"><span class="media-track-index">'+String(i+1).padStart(2,'0')+'</span><span class="media-track-icon">'+(isAudio?'♫':'▶')+'</span><span class="media-track-copy"><b>'+esc(f.name)+'</b><small>'+esc(mediaStamp(f))+'</small></span><span class="media-track-size">'+size(f.size)+'</span><span class="media-track-play">'+(isAudio?'PLAY':'WATCH')+'</span></button>').join(''):'<div class="empty"><b>No '+(isAudio?'audio':'video')+' files found</b>'+(all.length?'Try a different search.':'Upload media to Phone Bridge Drive and it will appear here.')+'</div>';
 }
 function renderMediaLibraries(){renderMediaList('audio');renderMediaList('video')}
-function playMedia(kind,id){
+async function playMedia(kind,id){
  const isAudio=kind==='audio',queue=mediaFiles(kind),index=queue.findIndex(f=>f.id===id);if(index<0){toast('That media file is no longer in Drive. Refresh and try again.');return}
- if(isAudio){audioQueue=queue;audioIndex=index;const f=queue[index],el=$('audioElement');$('audioNowTitle').textContent=f.name;$('audioNowMeta').textContent=mediaStamp(f);$('audioPlaybackStatus').textContent='Loading track…';el.src=previewUrl(f.id);el.load();el.play().then(()=>$('audioPlaybackStatus').textContent='Playing now').catch(()=>$('audioPlaybackStatus').textContent='Tap play to start');}
- else{videoQueue=queue;videoIndex=index;const f=queue[index],el=$('videoElement');$('videoNowTitle').textContent=f.name;$('videoNowMeta').textContent=mediaStamp(f);el.src=previewUrl(f.id);el.load();el.play().catch(()=>{});}
+ if(isAudio){audioQueue=queue;audioIndex=index}else{videoQueue=queue;videoIndex=index}
+ const f=queue[index],el=$(isAudio?'audioElement':'videoElement');
+ if(isAudio){$('audioNowTitle').textContent=f.name;$('audioNowMeta').textContent=mediaStamp(f);$('audioPlaybackStatus').textContent='Loading track...'}else{$('videoNowTitle').textContent=f.name;$('videoNowMeta').textContent=mediaStamp(f)}
  renderMediaLibraries();
+ try{
+  const url=await authenticatedDrivePreviewUrl(f.id,f.name);
+  if((isAudio?audioQueue[audioIndex]?.id:videoQueue[videoIndex]?.id)!==f.id)return;
+  el.pause();el.src=url;el.load();
+  try{await el.play();if(isAudio)$('audioPlaybackStatus').textContent='Playing now'}catch(error){if(isAudio)$('audioPlaybackStatus').textContent='Ready - tap Play to start'}
+ }catch(error){if(isAudio)$('audioPlaybackStatus').textContent='Could not load track: '+error.message;else toast('Could not load video: '+error.message)}
 }
 function stepMedia(kind,delta){const q=kind==='audio'?audioQueue:videoQueue,i=kind==='audio'?audioIndex:videoIndex;if(!q.length)return;const next=(i+delta+q.length)%q.length;playMedia(kind,q[next].id)}
 $('audioTrackList').addEventListener('click',e=>{const b=e.target.closest('[data-audio-play]');if(b)playMedia('audio',decodeURIComponent(b.dataset.audioPlay))});

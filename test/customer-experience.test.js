@@ -216,3 +216,15 @@ test('device enrollment records the ticket owner and consumes an unexpired ticke
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8');const redeem=server.slice(server.indexOf("app.post('/api/agent/enroll'"),server.indexOf("app.use('/api'"));
  assert.match(redeem,/\.is\('consumed_at',null\)\.gt\('expires_at',new Date\(\)\.toISOString\(\)\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)\.eq\('id',ticket\.id\)\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);assert.match(redeem,/user_id:ticket\.user_id/);
 });
+
+test('Drive video, audio and previews fetch media with account authorization before using browser object URLs',()=>{
+ const page=html();
+ assert.ok(page.includes('async function authenticatedDrivePreviewUrl(id,name)'));
+ assert.ok(page.includes("fetch('/api/download?id='+encodeURIComponent(id)"));
+ assert.ok(page.includes("headers:headers(),credentials:'same-origin'"));
+ assert.ok(page.includes('new Blob([original],{type:mime})'));
+ assert.ok(page.includes('async function playMedia(kind,id)'));
+ assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(f.id,f.name)'));
+ assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(id,f.name)'));
+ assert.ok(!page.includes('/api/preview?id='));
+});
