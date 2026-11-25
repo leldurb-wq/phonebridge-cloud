@@ -71,9 +71,13 @@ test('PC workspace startup avoids duplicate transfer lookups and loads history o
  assert.match(page,/if\(name==='transfer'&&accountStarted\)\{loadTransferHistory\(\);if\(phoneClient\)loadDevices\(\);else loadTransferPhones\(\)\}/);
 });
 
-test('the unified dark theme overrides light legacy styles on every workspace feature page',()=>{
+test('PhoneBridge is permanently dark with no light-mode toggle or saved theme preference',()=>{
  const page=html();const oldTheme=page.indexOf('phonebridge-redesign.css');const unifiedTheme=page.indexOf('phonebridge-unified.css');
  assert.ok(oldTheme>=0&&unifiedTheme>oldTheme&&unifiedTheme<page.indexOf('</head>'),'unified theme loads after the legacy stylesheet');
+ assert.match(page,/<html lang="en" data-theme="dark">/,'dark mode is active before first paint');
+ assert.match(page,/<meta name="theme-color" content="#050914">/,'browser chrome uses the dark theme color');
+ assert.doesNotMatch(page,/themeToggle|Light mode|Dark mode|pb-theme|applyTheme\(/,'there is no theme toggle or persisted light-mode setting');
+ assert.match(page,/document\.documentElement\.dataset\.theme='dark'/,'the app enforces dark mode during startup');
  const css=fs.readFileSync(path.join(root,'public/phonebridge-unified.css'),'utf8');
  const darkTheme=css.lastIndexOf('/* PhoneBridge dark workspace palette');
  assert.ok(darkTheme>css.indexOf('/* Account entry'),'dark palette is the final theme override');

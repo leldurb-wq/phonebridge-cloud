@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f4f6fa">
+<meta name="theme-color" content="#050914">
 <meta name="application-name" content="Phone Bridge">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Phone Bridge">
 <link rel="manifest" href="/manifest.webmanifest?v=stage-a">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/phonebridge-192.png">
@@ -1026,7 +1026,7 @@ body[data-page="overview"] .hero-note{border:1px solid var(--pb-line);border-rad
 @media(prefers-reduced-motion:reduce){body:after{animation:none!important}body .mobile-tabbar a{transition:none!important}}
 </style>
   <link rel="stylesheet" href="/phonebridge-redesign.css?v=20261125-1">
-  <link rel="stylesheet" href="/phonebridge-unified.css?v=20261125-2">
+  <link rel="stylesheet" href="/phonebridge-unified.css?v=20261125-3">
 <style>
 /* SIGNED-IN WELCOME EXPERIENCE — refined luminous PhoneBridge identity */
 #welcomePage{position:relative;isolation:isolate;padding:clamp(20px,4vw,46px) 0 34px}
@@ -1247,7 +1247,7 @@ body[data-page="pairing"] .pairing-footnote{width:min(100%,1180px);margin-left:a
   <div class="cosmos-bottom"><div class="cosmos-bottom-copy"><span>ONE PRIVATE CONNECTION</span><small>Files · Devices · Your space</small></div><button class="cosmos-cta" id="welcomePairButton" type="button"><span>TRY THE NEW FEATURES</span><b>↗</b></button><div class="cosmos-bottom-index">PHONEBRIDGE <span>2026</span></div></div>
  </div>
 </section>
-<div class="a11y-bar" role="group" aria-label="Display and accessibility settings"><span class="a11y-label">ACCESSIBILITY</span><button class="a11y-btn" id="textToggle" aria-pressed="false" type="button">A+ Text</button><button class="a11y-btn" id="contrastToggle" aria-pressed="false" type="button">High contrast</button><button class="a11y-btn" id="motionToggle" aria-pressed="false" type="button">Reduce motion</button><button class="a11y-btn theme-btn" id="themeToggle" type="button" aria-pressed="true" aria-label="Switch to light mode">Light mode</button></div>
+<div class="a11y-bar" role="group" aria-label="Display and accessibility settings"><span class="a11y-label">ACCESSIBILITY</span><button class="a11y-btn" id="textToggle" aria-pressed="false" type="button">A+ Text</button><button class="a11y-btn" id="contrastToggle" aria-pressed="false" type="button">High contrast</button><button class="a11y-btn" id="motionToggle" aria-pressed="false" type="button">Reduce motion</button></div>
  <section id="setupPage" class="hidden setup-page" aria-labelledby="setupTitle">
   <div class="setup-intro"><div><div class="eyebrow">PHONE BRIDGE · GETTING STARTED</div><h1 id="setupTitle">Everything connected.<br><span>Nothing complicated.</span></h1><p>The original setup guide is preserved. Local ThinkPad setup checks are not available from this cloud workspace.</p></div><div class="setup-mark"><div class="setup-mark-icon">PB</div><span>YOUR DEVICES<br><b>YOUR PRIVATE SPACE</b></span></div></div>
   <div class="setup-grid">
@@ -2295,9 +2295,10 @@ $('welcomePairButton').addEventListener('click',()=>showPage('pairing'));
 $('textToggle').onclick=()=>{const on=document.body.classList.toggle('large-text');$('textToggle').setAttribute('aria-pressed',String(on));$('textToggle').textContent=on?'A→ Text':'A+ Text'};
 $('contrastToggle').onclick=()=>{const on=document.body.classList.toggle('high-contrast');$('contrastToggle').setAttribute('aria-pressed',String(on))};
 $('motionToggle').onclick=()=>{const on=document.body.classList.toggle('reduce-motion');$('motionToggle').setAttribute('aria-pressed',String(on))};
-function applyTheme(theme){const dark=theme==='dark';document.documentElement.dataset.theme=dark?'dark':'light';try{localStorage.setItem('pb-theme',dark?'dark':'light')}catch(e){}const b=$('themeToggle');if(b){b.textContent=dark?'Light mode':'Dark mode';b.setAttribute('aria-pressed',String(dark));b.setAttribute('aria-label',dark?'Switch to light mode':'Switch to dark mode')}const m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.content=dark?'#0b1220':'#f4f6f8'}
-let savedTheme='dark';try{savedTheme=localStorage.getItem('pb-theme')||'dark'}catch(e){};applyTheme(savedTheme);
-$('themeToggle').onclick=()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
+/* PhoneBridge uses a fixed dark appearance. No saved preference or theme toggle. */
+document.documentElement.dataset.theme='dark';
+const phoneBridgeThemeColor=document.querySelector('meta[name="theme-color"]');
+if(phoneBridgeThemeColor)phoneBridgeThemeColor.content='#050914';
  $('runSetupChecks').onclick=runSetupChecks;
  $('copySetupAddress').onclick=async()=>{try{await navigator.clipboard.writeText(info.lanAddress||info.secureAddress||info.address);say('setupCheckMessage','Wi-Fi address copied.')}catch{say('setupCheckMessage','Clipboard access is unavailable in this browser.')}};
 
