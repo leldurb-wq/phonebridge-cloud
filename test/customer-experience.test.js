@@ -38,6 +38,7 @@ test('cinematic workspace uses a full-bleed dark outer shell without light page 
  assert.match(theme,/body\[data-page="overview"\] \.shell\{width:100%;max-width:none/);
  assert.match(theme,/body\[data-page="overview"\] \.topbar\{[\s\S]*background:rgba\(4,10,22,\.9\)!important/);
  assert.match(theme,/body\[data-page="overview"\] \.phonebridge-workspace>p:first-child\{display:none!important\}/);
+ assert.match(theme,/body\[data-page="overview"\] #overview\.hero\{display:none!important\}/);
  assert.match(theme,/body\[data-page="overview"\] #workspace>\.card\{display:none!important\}/);
  assert.match(theme,/body\[data-page="overview"\] \.nav,body\[data-page="overview"\] \.mobile-tabbar,body\[data-page="overview"\] \.a11y-bar\{display:none!important\}/);
  assert.match(theme,/body\[data-page="overview"\] #workspace>#dynamicWorkspace\{width:100%;max-width:none/);
