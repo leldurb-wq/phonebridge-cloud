@@ -75,3 +75,10 @@ The current legacy Phone Bridge server still uses shared local JSON metadata and
 - Add account deletion/export, secure device sessions, audit retention and recovery procedures.
 - Set upload limits, MIME validation, malware scanning policy, quotas and cost alerts.
 - Never expose Supabase service-role secrets in client code or Render logs.
+
+## Transfer recovery details
+
+- Interrupted browser uploads remain in the cloud queue. Select the same file again in the same browser to resume; PhoneBridge checks the filename, size, modified time, first/last chunk fingerprints and the server's verified chunk manifest. Changed chunks are uploaded again instead of being skipped.
+- Phone browser receives use Origin Private File System (OPFS) when available. Each chunk is hash-checked and committed at its file offset, so reopening PhoneBridge can verify and reuse completed chunks. Browsers without OPFS are limited to 256 MiB for the in-memory fallback; larger transfers remain queued rather than risking a browser memory crash.
+- The Windows connector resolves the actual Windows Documents known folder (including redirected folders) before using Documents\PhoneBridge\Incoming.
+- The current integrity contract verifies every 8 MiB chunk and the final file size. A sender-provided whole-file SHA-256 check is not yet implemented.

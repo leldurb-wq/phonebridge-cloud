@@ -1617,7 +1617,7 @@ async function api(url,opt={}) {
  if(!safe)throw Error('This PhoneBridge feature is not connected to the cloud service yet. No local computer API was called.');
  const r=await fetch(url,{...opt,credentials:'same-origin',headers:headers(opt.headers),cache:'no-store'});let data={};
  try{data=r.headers.get('content-type')?.includes('json')?await r.json():{}}catch{}
- if(!r.ok)throw Error(data.error||'Cloud request failed');return data;
+ if(!r.ok){const error=Error(data.error||'Cloud request failed');error.statusCode=r.status;error.retryable=[408,425,429,500,502,503,504].includes(r.status);throw error}return data;
 }
 function size(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -2031,19 +2031,43 @@ async function hashChunk(blob){
  const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
  return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
-async function uploadTransferChunks(transferId,transfer,file,onChunk){
- let next=0;
+const UPLOAD_RESUME_STORAGE_KEY='phonebridge-upload-resume-v1';
+function pendingUploadRecords(){try{const value=JSON.parse(localStorage.getItem(UPLOAD_RESUME_STORAGE_KEY)||'[]');return Array.isArray(value)?value:[]}catch{return []}}
+function storePendingUpload(record){const all=pendingUploadRecords().filter(x=>x.id!==record.id);all.push(record);try{localStorage.setItem(UPLOAD_RESUME_STORAGE_KEY,JSON.stringify(all.slice(-20)))}catch{}}
+function removePendingUpload(id){const all=pendingUploadRecords().filter(x=>x.id!==id);try{localStorage.setItem(UPLOAD_RESUME_STORAGE_KEY,JSON.stringify(all))}catch{}}
+async function fileFingerprint(file){const first=file.slice(0,Math.min(PC_CHUNK_SIZE,file.size)),last=file.slice(Math.max(0,file.size-PC_CHUNK_SIZE));return{firstHash:await hashChunk(first),lastHash:await hashChunk(last)}}
+async function startOrResumeTransfer(file,{direction,deviceId,targetClientId}){
+ const targetId=direction==='pc_to_phone'?targetClientId:deviceId,fingerprint=await fileFingerprint(file);
+ const pending=pendingUploadRecords().find(x=>x.direction===direction&&x.targetId===targetId&&x.name===file.name&&x.size===file.size&&x.lastModified===file.lastModified&&x.firstHash===fingerprint.firstHash&&x.lastHash===fingerprint.lastHash);
+ if(pending){
+  try{
+   const result=await api('/api/transfers/'+encodeURIComponent(pending.id)+'?manifest=1'),transfer=result.transfer;
+   const same=transfer&&transfer.direction===direction&&transfer.name===file.name&&transfer.size===file.size&&(direction==='pc_to_phone'?transfer.targetClientId===targetClientId:transfer.deviceId===deviceId);
+   if(same&&!['failed','cancelled'].includes(transfer.status))return{transfer,uploadedChunks:transfer.uploadedChunks||[],resumed:true};
+  }catch{}
+  removePendingUpload(pending.id);
+ }
+ const body={direction,deviceId,name:file.name,size:file.size,type:fileMimeType(file.name,file.type)};
+ if(targetClientId)body.targetClientId=targetClientId;
+ const started=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),transfer={...started.transfer,direction,deviceId,targetClientId:targetClientId||null,status:'uploading'};
+ storePendingUpload({id:transfer.id,direction,targetId,name:file.name,size:file.size,lastModified:file.lastModified,firstHash:fingerprint.firstHash,lastHash:fingerprint.lastHash});
+ return{transfer,uploadedChunks:[],resumed:false};
+}
+async function uploadTransferChunks(transferId,transfer,file,onChunk,uploadedChunks=[]){
+ let next=0;const received=new Set(uploadedChunks);
  async function worker(){
   while(true){
    const index=next++;if(index>=transfer.chunkCount)return;
    const start=index*transfer.chunkSize,end=Math.min(file.size,start+transfer.chunkSize),chunk=file.slice(start,end),digest=await hashChunk(chunk);
+   const savedChunk=Array.isArray(transfer.chunks)?transfer.chunks.find(item=>item.index===index):null;
+   if(received.has(index)&&savedChunk?.sha256===digest){onChunk(chunk.size,end,index,true);continue}
    let error=null;
    for(let attempt=0;attempt<3;attempt++){
     try{await api('/api/transfers/'+transferId+'/chunks/'+index,{method:'PUT',headers:{'Content-Type':'application/octet-stream','X-Chunk-SHA256':digest},body:chunk});error=null;break}
-    catch(problem){error=problem;if(attempt<2)await pause(400*(attempt+1))}
+    catch(problem){error=problem;if(attempt<2&&problem.retryable!==false)await pause(400*(attempt+1));else if(attempt<2&&problem.statusCode>=400&&problem.statusCode<500)break}
    }
    if(error)throw error;
-   onChunk(chunk.size,end,index);
+   onChunk(chunk.size,end,index,false);
   }
  }
  await Promise.all(Array.from({length:Math.min(3,transfer.chunkCount)},worker));
@@ -2056,83 +2080,79 @@ async function sendFilesToPc(fileList){
  const device=pcPairedDevices.find(item=>item.id===deviceId&&item.connected);
  if(!device){say('pcTransferMsg','That computer is offline. Refresh your paired computers and try again.');return}
  const emptyFile=files.find(file=>file.size===0);if(emptyFile){say('pcTransferMsg',emptyFile.name+' is empty. Choose a file with content.');return}
- const tooLarge=files.find(file=>file.size>2*1024*1024*1024);
- if(tooLarge){say('pcTransferMsg',tooLarge.name+' is larger than the 2 GB limit.');return}
- const total=files.reduce((sum,file)=>sum+file.size,0),started=Date.now();
- let sent=0,complete=0;const failed=[],pending=[];
+ const tooLarge=files.find(file=>file.size>2*1024*1024*1024);if(tooLarge){say('pcTransferMsg',tooLarge.name+' is larger than the 2 GB limit.');return}
+ const total=files.reduce((sum,file)=>sum+file.size,0),started=Date.now();let sent=0,complete=0;const failed=[],pending=[];
  $('pcTransferProgress').classList.remove('hidden');$('pcTransferBar').style.width='0%';
- $('pcTransferQueue').innerHTML=files.map((file,index)=>'<div class="queue-item" id="pc-transfer-'+index+'"><span>'+esc(file.name)+'</span><span>Waiting · '+size(file.size)+'</span></div>').join('');
- const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Uploading '+complete+'/'+files.length+' files · '+pct+'% · '+size(rate)+'/s · '+eta+'s remaining')};
+ $('pcTransferQueue').innerHTML=files.map((file,index)=>'<div class="queue-item" id="pc-transfer-'+index+'"><span>'+esc(file.name)+'</span><span>Waiting ? '+size(file.size)+'</span></div>').join('');
+ const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Uploading '+complete+'/'+files.length+' files ? '+pct+'% ? '+size(rate)+'/s ? '+eta+'s remaining')};
  for(let fileIndex=0;fileIndex<files.length;fileIndex++){
   const file=files[fileIndex],row=$('pc-transfer-'+fileIndex);let transferId='';
   try{
-   row.lastElementChild.textContent='Starting secure transfer…';
-   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId,name:file.name,size:file.size,type:fileMimeType(file.name,file.type)})});
-   const transfer=startedTransfer.transfer;transferId=transfer.id;
-   await uploadTransferChunks(transferId,transfer,file,(bytes,end)=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(end/file.size*100)+'%';update()});
-   try{await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(error){const state=await api('/api/transfers/'+transferId);if(!['queued','receiving'].includes(state.transfer.status))throw error}
-   row.lastElementChild.textContent='Uploaded to secure relay · waiting for ThinkPad receipt…';
+   row.lastElementChild.textContent='Checking for an interrupted upload?';
+   const prepared=await startOrResumeTransfer(file,{direction:'phone_to_pc',deviceId}),transfer=prepared.transfer;transferId=transfer.id;let finalStatus=transfer.status||'uploading';
+   if(finalStatus==='uploading'){
+    row.lastElementChild.textContent=prepared.resumed?'Resuming verified chunks?':'Starting secure transfer?';
+    await uploadTransferChunks(transferId,transfer,file,(bytes,end)=>{sent+=bytes;row.lastElementChild.textContent='Uploading ? '+Math.round(end/file.size*100)+'%';update()},prepared.uploadedChunks);
+    try{const queued=await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});finalStatus=queued.status||'queued'}catch(error){const state=await api('/api/transfers/'+transferId);finalStatus=state.transfer.status;if(!['queued','receiving','completed'].includes(finalStatus))throw error}
+   }
+   if(finalStatus!=='uploading')removePendingUpload(transferId);
+   row.lastElementChild.textContent='Uploaded to secure relay ? waiting for ThinkPad receipt?';
    say('pcTransferMsg','Phone upload complete. Waiting for the ThinkPad to verify and save '+file.name+'.');
-   let finalStatus='queued',lastActivity='';
-   for(let check=0;check<450;check++){
-    await pause(4000);
-    const status=await api('/api/transfers/'+transferId),item=status.transfer;
-    finalStatus=item.status;
-    if(finalStatus==='completed')break;
+   let lastActivity='';
+   for(let check=0;check<450&&finalStatus!=='completed';check++){
+    await pause(4000);const status=await api('/api/transfers/'+transferId),item=status.transfer;finalStatus=item.status;
     if(finalStatus==='failed')throw Error(item.error||'The ThinkPad could not save this file.');
-    const activity=item.updatedAt?new Date(item.updatedAt).getTime():0;
-    const stalled=activity&&Date.now()-activity>120000;
-    if(finalStatus==='receiving')row.lastElementChild.textContent=stalled?'ThinkPad connection interrupted · retrying…':'ThinkPad receiving and verifying…';
-    else row.lastElementChild.textContent=stalled?'Waiting for ThinkPad · retrying delivery…':'Uploaded · queued for ThinkPad';
+    const activity=item.updatedAt?new Date(item.updatedAt).getTime():0,stalled=activity&&Date.now()-activity>120000;
+    if(finalStatus==='receiving')row.lastElementChild.textContent=stalled?'ThinkPad connection interrupted ? retrying?':'ThinkPad receiving and verifying?';
+    else if(finalStatus!=='completed')row.lastElementChild.textContent=stalled?'Waiting for ThinkPad ? retrying delivery?':'Uploaded ? queued for ThinkPad';
     if(item.error&&item.error!==lastActivity){lastActivity=item.error;say('pcTransferMsg',item.error)}
    }
-   if(finalStatus==='completed')row.lastElementChild.textContent='Saved and verified on ThinkPad · '+size(file.size);
-   else {row.lastElementChild.textContent=finalStatus==='receiving'?'ThinkPad is still receiving · check Incoming folder':'Uploaded securely · waiting for ThinkPad to reconnect';pending.push(file.name+' ('+finalStatus+')')}
+   if(finalStatus==='completed')row.lastElementChild.textContent='Saved and verified on ThinkPad ? '+size(file.size);
+   else{row.lastElementChild.textContent=finalStatus==='receiving'?'ThinkPad is still receiving ? check Incoming folder':'Uploaded securely ? waiting for ThinkPad to reconnect';pending.push(file.name+' ('+finalStatus+')')}
    complete++;update();
   }catch(error){
-   if(transferId){try{const state=await api('/api/transfers/'+transferId);if(state.transfer.status==='uploading')await api('/api/transfers/'+transferId,{method:'DELETE'})}catch{}}
-   failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message;complete++;update();
+   if(transferId){try{const state=await api('/api/transfers/'+transferId);if(state.transfer.status!=='uploading')removePendingUpload(transferId);else row.lastElementChild.textContent='Paused ? choose the same file again to resume'}catch{row.lastElementChild.textContent='Paused ? choose the same file again to resume'}}
+   failed.push(file.name+': '+error.message);if(!transferId)row.lastElementChild.textContent='Failed ? '+error.message;complete++;update();
   }
  }
- await loadTransferHistory();say('pcTransferMsg',failed.length?(files.length-failed.length)+' uploaded · '+failed.join(' · '):pending.length?pending.length+' file(s) uploaded securely but still awaiting ThinkPad confirmation: '+pending.join(', '):'All '+files.length+' file(s) delivered and verified on '+device.name+'.');
- toast(failed.length?'Some PC transfers need attention':pending.length?'Files uploaded · delivery pending':'Files delivered to ThinkPad');
+ await loadTransferHistory();say('pcTransferMsg',failed.length?(files.length-failed.length)+' uploaded ? '+failed.join(' ? '):pending.length?pending.length+' file(s) uploaded securely but still awaiting ThinkPad confirmation: '+pending.join(', '):'All '+files.length+' file(s) delivered and verified on '+device.name+'.');
+ toast(failed.length?'Some PC transfers need attention':pending.length?'Files uploaded ? delivery pending':'Files delivered to ThinkPad');
 }
 async function sendFilesToPhone(fileList){
  const files=[...fileList];if(!files.length)return;
  await freshAccountToken();
- const targetClientId=$('pcDeviceSelect').value;
- const target=transferPhones.find(x=>x.id===targetClientId&&x.connected);
+ const targetClientId=$('pcDeviceSelect').value,target=transferPhones.find(x=>x.id===targetClientId&&x.connected);
  if(!target){say('pcTransferMsg','Choose the current phone. Open PhoneBridge on the phone and keep it online.');return}
  const computer=pcPairedDevices.find(x=>x.connected);
  if(!computer){say('pcTransferMsg','The ThinkPad connector is offline. Reconnect it before sending to your phone.');return}
- const invalid=files.find(f=>!f.size||f.size>2*1024*1024*1024);
- if(invalid){say('pcTransferMsg',invalid.size?'Choose files up to 2 GB.':' '+invalid.name+' is empty.');return}
+ const invalid=files.find(f=>!f.size||f.size>2*1024*1024*1024);if(invalid){say('pcTransferMsg',invalid.size?'Choose files up to 2 GB.':invalid.name+' is empty.');return}
  const total=files.reduce((sum,f)=>sum+f.size,0),started=Date.now();let sent=0,done=0;const failed=[];
  $('pcTransferProgress').classList.remove('hidden');$('pcTransferBar').style.width='0%';
- $('pcTransferQueue').innerHTML=files.map((f,i)=>'<div class="queue-item" id="pc-transfer-'+i+'"><span>'+esc(f.name)+'</span><span>Waiting · '+size(f.size)+'</span></div>').join('');
- const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Sending to '+target.label+' · '+pct+'% · '+size(rate)+'/s · '+eta+'s remaining')};
+ $('pcTransferQueue').innerHTML=files.map((f,i)=>'<div class="queue-item" id="pc-transfer-'+i+'"><span>'+esc(f.name)+'</span><span>Waiting ? '+size(f.size)+'</span></div>').join('');
+ const update=()=>{const pct=total?Math.min(100,Math.round(sent/total*100)):100,seconds=Math.max(.25,(Date.now()-started)/1000),rate=sent/seconds,eta=rate?Math.ceil((total-sent)/rate):0;$('pcTransferBar').style.width=pct+'%';say('pcTransferMsg','Sending to '+target.label+' ? '+pct+'% ? '+size(rate)+'/s ? '+eta+'s remaining')};
  for(let i=0;i<files.length;i++){
   const file=files[i],row=$('pc-transfer-'+i);let transferId='';
   try{
-   const startedTransfer=await api('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({direction:'pc_to_phone',targetClientId,deviceId:computer.id,name:file.name,size:file.size,type:fileMimeType(file.name,file.type)})});
-   const transfer=startedTransfer.transfer;transferId=transfer.id;
-   await uploadTransferChunks(transferId,transfer,file,bytes=>{sent+=bytes;row.lastElementChild.textContent='Uploading · '+Math.round(sent/Math.max(1,total)*100)+'%';update()});
-   await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-   row.lastElementChild.textContent='Uploaded · waiting for '+target.label+' to receive…';
-   let status='queued';
-   for(let check=0;check<450;check++){
-    await pause(3000);
-    const result=await api('/api/transfers/'+transferId),item=result.transfer;status=item.status;
-    if(status==='completed')break;
+   const prepared=await startOrResumeTransfer(file,{direction:'pc_to_phone',deviceId:computer.id,targetClientId}),transfer=prepared.transfer;transferId=transfer.id;let status=transfer.status||'uploading';
+   if(status==='uploading'){
+    await uploadTransferChunks(transferId,transfer,file,bytes=>{sent+=bytes;row.lastElementChild.textContent='Uploading ? '+Math.round(sent/Math.max(1,total)*100)+'%';update()},prepared.uploadedChunks);
+    try{const queued=await api('/api/transfers/'+transferId+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});status=queued.status||'queued'}catch(error){const state=await api('/api/transfers/'+transferId);status=state.transfer.status;if(!['queued','receiving','completed'].includes(status))throw error}
+   }
+   if(status!=='uploading')removePendingUpload(transferId);
+   row.lastElementChild.textContent='Uploaded ? waiting for '+target.label+' to receive?';
+   for(let check=0;check<450&&status!=='completed';check++){
+    await pause(3000);const result=await api('/api/transfers/'+transferId),item=result.transfer;status=item.status;
     if(status==='failed')throw Error(item.error||'The phone could not receive this file.');
-    row.lastElementChild.textContent=status==='receiving'?'Phone is downloading and verifying…':'Waiting for '+target.label+' to come online…';
+    row.lastElementChild.textContent=status==='receiving'?'Phone is downloading and verifying?':'Waiting for '+target.label+' to come online?';
    }
    if(status!=='completed')throw Error('Upload finished, but the phone has not confirmed delivery yet.');
-   row.lastElementChild.textContent='Delivered to '+target.label+' · '+size(file.size);done++;update();
-  }catch(error){failed.push(file.name+': '+error.message);row.lastElementChild.textContent='Failed · '+error.message}
+   removePendingUpload(transferId);row.lastElementChild.textContent='Delivered to '+target.label+' ? '+size(file.size);done++;update();
+  }catch(error){
+   if(transferId){try{const state=await api('/api/transfers/'+transferId);if(state.transfer.status!=='uploading')removePendingUpload(transferId);else row.lastElementChild.textContent='Paused ? choose the same file again to resume'}catch{row.lastElementChild.textContent='Paused ? choose the same file again to resume'}}
+   failed.push(file.name+': '+error.message);if(!transferId)row.lastElementChild.textContent='Failed ? '+error.message;
+  }
  }
- await loadTransferHistory();
- say('pcTransferMsg',failed.length?done+' delivered · '+failed.join(' · '):'All '+done+' file(s) delivered to '+target.label+'.');
+ await loadTransferHistory();say('pcTransferMsg',failed.length?done+' delivered ? '+failed.join(' ? '):'All '+done+' file(s) delivered to '+target.label+'.');
  toast(failed.length?'Some phone transfers need attention':'Files delivered to your phone');
 }
 function sendFilesFromThisDevice(fileList){return phoneClient?sendFilesToPc(fileList):sendFilesToPhone(fileList)}
@@ -2142,43 +2162,58 @@ const pcDrop=$('pcDrop');
 ['dragleave','drop'].forEach(name=>pcDrop.addEventListener(name,event=>{event.preventDefault();pcDrop.classList.remove('over')}));
 pcDrop.addEventListener('drop',event=>sendFilesFromThisDevice(event.dataTransfer.files).catch(error=>say('pcTransferMsg',error.message)));
 async function fetchTransferBlob(item,clientId=''){
+ const details=Array.isArray(item.chunks)?item:(await api('/api/transfers/'+encodeURIComponent(item.id)+'?manifest=1')).transfer;
+ const chunkSize=Number(details.chunkSize||item.chunkSize||PC_CHUNK_SIZE),chunkCount=Number(details.chunkCount||item.chunkCount),fileSize=Number(details.size||item.size),manifest=Array.isArray(details.chunks)?details.chunks:[];
+ if(!Number.isSafeInteger(fileSize)||fileSize<1||!Number.isInteger(chunkCount)||chunkCount<1||manifest.length!==chunkCount)throw Error('The transfer manifest is incomplete. Refresh the transfer and try again.');
  const getChunk=async index=>{
-  const suffix=clientId?'?clientId='+encodeURIComponent(clientId):'';
-  const response=await fetch('/api/transfers/'+encodeURIComponent(item.id)+'/chunks/'+index+suffix,{headers:headers(),credentials:'same-origin',cache:'no-store'});
-  if(!response.ok){let data={};try{data=await response.json()}catch{}const error=Error(data.error||'Could not download file chunk '+(index+1));error.retryable=[408,425,429,500,502,503,504].includes(response.status);throw error}
-  const bytes=await response.arrayBuffer(),expected=response.headers.get('X-Chunk-SHA256');
-  if(expected&&await hashChunk(new Blob([bytes]))!==expected)throw Error('File chunk '+(index+1)+' failed integrity verification.');
-  return bytes;
+  const suffix=clientId?'?clientId='+encodeURIComponent(clientId):'',meta=manifest[index];let lastError;
+  for(let attempt=0;attempt<2;attempt++){
+   try{
+    const response=await fetch('/api/transfers/'+encodeURIComponent(item.id)+'/chunks/'+index+suffix,{headers:headers(),credentials:'same-origin',cache:'no-store'});
+    if(!response.ok){let data={};try{data=await response.json()}catch{}const error=Error(data.error||'Could not download file chunk '+(index+1));error.statusCode=response.status;error.retryable=[408,425,429,500,502,503,504].includes(response.status);lastError=error;if(error.retryable&&attempt===0)continue;throw error}
+    const bytes=await response.arrayBuffer(),expected=response.headers.get('X-Chunk-SHA256')||meta?.sha256;
+    if(expected&&await hashChunk(new Blob([bytes]))!==expected){lastError=Error('File chunk '+(index+1)+' failed integrity verification.');if(attempt===0)continue;throw lastError}
+    const expectedSize=index===chunkCount-1?fileSize-index*chunkSize:chunkSize;if(bytes.byteLength!==expectedSize)throw Error('File chunk '+(index+1)+' has an unexpected size.');
+    return bytes;
+   }catch(error){lastError=error;if(attempt===0&&(error.retryable||!error.statusCode))continue;throw error}
+  }
+  throw lastError||Error('Could not verify file chunk '+(index+1)+'.');
  };
  if(navigator.storage&&typeof navigator.storage.getDirectory==='function'){
-  let writable=null;
-  try{
-   const root=await navigator.storage.getDirectory(),folder=await root.getDirectoryHandle('PhoneBridgeReceived',{create:true});
-   const safeName=item.name.replace(/[<>:"/\\|?*\\x00-\\x1f]/g,'_').slice(0,120)||'received-file';
-   const handle=await folder.getFileHandle(item.id+'-'+safeName,{create:true});
-   writable=await handle.createWritable();
-   for(let start=0;start<item.chunkCount;start+=3){
-    const batch=await Promise.all(Array.from({length:Math.min(3,item.chunkCount-start)},(_,offset)=>getChunk(start+offset)));
-    for(const bytes of batch)await writable.write(bytes);
+  const root=await navigator.storage.getDirectory(),folder=await root.getDirectoryHandle('PhoneBridgeReceived',{create:true});
+  const safeName=item.name.replace(/[<>:"/\\|?*\\x00-\\x1f]/g,'_').slice(0,120)||'received-file';
+  const handle=await folder.getFileHandle(item.id+'-'+safeName,{create:true});
+  for(let start=0;start<chunkCount;start+=3){
+   const existing=await handle.getFile(),indexes=[];
+   for(let index=start;index<Math.min(chunkCount,start+3);index++){
+    const meta=manifest[index],offset=index*chunkSize,expected=index===chunkCount-1?fileSize-offset:chunkSize;
+    if(existing.size>=offset+expected){const local=await existing.slice(offset,offset+expected).arrayBuffer();if(await hashChunk(new Blob([local]))===meta.sha256)continue}
+    indexes.push(index);
    }
-   await writable.close();const saved=await handle.getFile(),mime=fileMimeType(item.name,item.type);return saved.type===mime?saved:new Blob([saved],{type:mime});
-  }catch(error){
-   if(writable)try{await writable.abort()}catch{}
-   throw Error('PhoneBridge could not save this file in browser storage: '+error.message);
+   const bytes=await Promise.all(indexes.map(getChunk));
+   for(let i=0;i<indexes.length;i++){
+    const index=indexes[i],writer=await handle.createWritable({keepExistingData:true});
+    await writer.write({type:'write',position:index*chunkSize,data:bytes[i]});await writer.close();
+   }
   }
+  const finalWriter=await handle.createWritable({keepExistingData:true});await finalWriter.truncate(fileSize);await finalWriter.close();
+  const saved=await handle.getFile(),mime=fileMimeType(item.name,item.type);return saved.type===mime?saved:new Blob([saved],{type:mime});
  }
- const parts=new Array(item.chunkCount);let next=0;
- async function worker(){while(true){const index=next++;if(index>=item.chunkCount)return;parts[index]=await getChunk(index)}}
- await Promise.all(Array.from({length:Math.min(3,item.chunkCount)},worker));
+ if(fileSize>256*1024*1024){const error=Error('This browser does not support persistent file storage for files over 256 MB. Update Safari or Chrome and reload PhoneBridge to receive this large file without filling memory.');error.retryable=true;error.blockRetry=true;throw error}
+ const parts=new Array(chunkCount);let next=0;
+ async function worker(){while(true){const index=next++;if(index>=chunkCount)return;parts[index]=await getChunk(index)}}
+ await Promise.all(Array.from({length:Math.min(3,chunkCount)},worker));
  return new Blob(parts,{type:fileMimeType(item.name,item.type)});
 }
 function downloadTransferBlob(blob,name){
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name||'PhoneBridge-file';document.body.appendChild(a);a.click();a.remove();
  const old=transferObjectUrls.get('download-temp');if(old)URL.revokeObjectURL(old);transferObjectUrls.set('download-temp',url);
 }
+const blockedPhoneTransfers=new Set();
 async function receivePhoneTransfer(item){
  if(activePhoneTransfers.has(item.id))return;activePhoneTransfers.add(item.id);
  try{
+  blockedPhoneTransfers.delete(item.id);
   await api('/api/transfers/'+item.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:transferClientId,status:'receiving'})});
   say('pcTransferMsg','Receiving '+item.name+' · '+size(item.size)+'…');
   const blob=await fetchTransferBlob(item,transferClientId),url=URL.createObjectURL(blob);
@@ -2187,14 +2222,15 @@ async function receivePhoneTransfer(item){
   say('pcTransferMsg','Received and verified '+item.name+'. Use Transfer history to open it again.');
   toast('Received '+item.name);await loadTransferHistory();
  }catch(error){
-  const retryable=!!error.retryable||/network|fetch|timeout|connection/i.test(error.message||'');
+  if(error.blockRetry)blockedPhoneTransfers.add(item.id);
+  const retryable=!!error.retryable||/network|fetch|timeout|connection|quota|storage|temporar/i.test(error.message||'');
   try{await api('/api/transfers/'+item.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:transferClientId,status:retryable?'queued':'failed',error:error.message})})}catch{}
   say('pcTransferMsg',retryable?'Connection interrupted while receiving '+item.name+'. PhoneBridge will retry automatically.':'Could not receive '+item.name+': '+error.message);await loadTransferHistory();
  }finally{activePhoneTransfers.delete(item.id)}
 }
 async function pollPhoneInbox(){
  if(!phoneClient||!transferClientId||!accountStarted||document.hidden)return;
- try{const data=await api('/api/transfers/inbox?clientId='+encodeURIComponent(transferClientId));for(const item of data.transfers||[])if(!activePhoneTransfers.has(item.id))receivePhoneTransfer(item).catch(()=>{})}catch{}
+ try{const data=await api('/api/transfers/inbox?clientId='+encodeURIComponent(transferClientId));for(const item of data.transfers||[])if(!activePhoneTransfers.has(item.id)&&!blockedPhoneTransfers.has(item.id))receivePhoneTransfer(item).catch(()=>{})}catch{}
 }
 async function loadTransferHistory(){
  try{const data=await api('/api/transfers');transferHistoryItems=data.transfers||[];renderTransferHistory()}catch(error){say('pcTransferMsg','Transfer history unavailable: '+error.message)}
@@ -2202,11 +2238,11 @@ async function loadTransferHistory(){
 function renderTransferHistory(){
  const box=$('transferHistory');if(!box)return;
  box.innerHTML=transferHistoryItems.length?transferHistoryItems.map(item=>{
-  const incoming=phoneClient?item.direction==='pc_to_phone':item.direction==='phone_to_pc';
-  const label=incoming?'Received':'Sent';
-  const status=item.status==='completed'?'Delivered':item.status==='failed'?'Failed':item.status==='cancelled'?'Cancelled':item.status==='receiving'?'Receiving':'In progress';
+  const incoming=phoneClient?item.direction==='pc_to_phone':item.direction==='phone_to_pc',label=incoming?'Received':'Sent';
+  const status=item.status==='completed'?'Delivered':item.status==='failed'?'Failed':item.status==='cancelled'?'Cancelled':item.status==='receiving'?'Receiving':item.status==='uploading'?'Upload in progress ? reselect the same file if interrupted':'In progress';
   const available=item.status==='completed'&&item.completedAt&&Date.now()-Date.parse(item.completedAt)<24*60*60*1000;
-  return '<div class="file"><div class="file-icon">'+(fileKind(item.name)==='videos'?'VID':fileKind(item.name)==='images'?'IMG':'FILE')+'</div><div class="file-name"><b>'+esc(item.name)+'</b><small>'+label+' · '+size(item.size)+' · '+status+' · '+new Date(item.createdAt).toLocaleString()+'</small></div><div class="file-actions">'+(available?'<button type="button" data-transfer-open="'+esc(item.id)+'">Open / Save</button>':'')+'</div></div>';
+  const cancel=item.status==='uploading'?'<button type="button" data-transfer-cancel="'+esc(item.id)+'">Cancel</button>':'';
+  return '<div class="file"><div class="file-icon">'+(fileKind(item.name)==='videos'?'VID':fileKind(item.name)==='images'?'IMG':'FILE')+'</div><div class="file-name"><b>'+esc(item.name)+'</b><small>'+label+' ? '+size(item.size)+' ? '+status+' ? '+new Date(item.createdAt).toLocaleString()+'</small></div><div class="file-actions">'+cancel+(available?'<button type="button" data-transfer-open="'+esc(item.id)+'">Open / Save</button>':'')+'</div></div>';
  }).join(''):'<div class="empty"><b>No transfers yet</b>Files sent or received through PhoneBridge will appear here.</div>';
 }
 async function openTransferFile(id){
@@ -2223,7 +2259,11 @@ async function openTransferFile(id){
   say('pcTransferMsg','Could not preview '+item.name+': '+error.message);
  }
 }
-$('transferHistory').addEventListener('click',event=>{const button=event.target.closest('[data-transfer-open]');if(button)openTransferFile(button.dataset.transferOpen)});
+$('transferHistory').addEventListener('click',async event=>{
+ const cancel=event.target.closest('[data-transfer-cancel]');
+ if(cancel){const id=cancel.dataset.transferCancel;if(!confirm('Cancel this interrupted upload and delete its staged chunks?'))return;cancel.disabled=true;try{await api('/api/transfers/'+encodeURIComponent(id),{method:'DELETE'});removePendingUpload(id);await loadTransferHistory();toast('Transfer cancelled')}catch(error){cancel.disabled=false;say('pcTransferMsg','Could not cancel this transfer: '+error.message)}return}
+ const button=event.target.closest('[data-transfer-open]');if(button)openTransferFile(button.dataset.transferOpen);
+});
 $('refreshTransferHistory').onclick=loadTransferHistory;
 
 async function upload(file,onProgress){

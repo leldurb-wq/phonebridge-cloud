@@ -226,7 +226,7 @@ test('PhoneBridge transfers work in both directions with authenticated phone des
  for(const route of ["app.post('/api/transfers'","app.put('/api/transfers/:transferId/chunks/:index'","app.post('/api/transfers/:transferId/complete'","app.get('/api/transfers/:transferId'","app.post('/api/agent/transfers/claim'","app.delete('/api/transfers/:transferId'","app.get('/api/agent/transfers/:transferId/chunks/:index'","app.post('/api/agent/transfers/:transferId/complete'"])assert.ok(server.includes(route),route+' exists');
  assert.match(server,/PC_TRANSFER_CHUNK=8\*1024\*1024/);assert.match(server,/PC_TRANSFER_MAX=2\*1024\*1024\*1024/);assert.match(server,/requireOwner\(req,res\)/);assert.match(server,/requireAgent\(req,res/);assert.match(server,/X-Chunk-SHA256/);assert.match(server,/Date\.now\(\)-2\*60\*1000/);assert.match(server,/\['completed','failed','queued'\]/);assert.match(server,/touchError/);
  assert.match(page,/id="pcDeviceSelect"/);assert.match(page,/id="pcFileInput"/);assert.match(page,/crypto\.subtle\.digest/);assert.match(page,/X-Chunk-SHA256/);assert.match(page,/2 GB per file/);
- assert.match(worker,/receiveTransfer/);assert.match(worker,/Documents','PhoneBridge','Incoming'/);assert.match(worker,/api\/agent\/transfers\/claim/);
+ assert.match(worker,/receiveTransfer/);assert.match(worker,/resolveDocumentsDirectory\(\),'PhoneBridge','Incoming'/);assert.match(worker,/Environment\+SpecialFolder\]::MyDocuments/);assert.match(worker,/api\/agent\/transfers\/claim/);
  assert.match(receiver,/createWriteStream|writeSync/);assert.match(receiver,/createHash\('sha256'\)/);assert.match(receiver,/fs\.renameSync/);assert.match(receiver,/existing\.size===size/);assert.match(receiver,/firstChunk/);assert.match(receiver,/Promise\.allSettled/);assert.match(receiver,/batchStart\+=3/);assert.match(server,/app\.post\('\/api\/transfer-clients\/register'/);assert.match(server,/app\.get\('\/api\/transfer-clients'/);assert.match(server,/app\.get\('\/api\/transfers\/inbox'/);assert.match(server,/app\.post\('\/api\/transfers\/:transferId\/receive'/);assert.match(server,/direction==='pc_to_phone'/);assert.match(server,/target_client_id/);assert.match(page,/Choose the current phone/);assert.match(page,/Send files to your phone/);assert.match(page,/pollPhoneInbox/);assert.match(page,/transferHistory/);assert.match(page,/Math\.min\(3,transfer\.chunkCount\)/);
  assert.doesNotMatch(worker,/readline|executeCommand|workspace-tasks|process\.exec\(/);
 });
@@ -306,4 +306,17 @@ test('Drive video, audio and previews fetch media with account authorization bef
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(f.id,f.name)'));
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(id,f.name)'));
  assert.ok(!page.includes('/api/preview?id='));
+});
+
+
+test('browser upload recovery resumes from the server manifest after the same file is selected again',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
+ assert.ok(server.includes("req.query.manifest==='1'"));assert.ok(server.includes('uploadedChunks=chunks.map(x=>x.index)'));assert.ok(server.includes('target_client_id,direction,file_name'));
+ for(const value of ['phonebridge-upload-resume-v1','lastModified:file.lastModified','firstHash:fingerprint.firstHash,lastHash:fingerprint.lastHash','startOrResumeTransfer(file','savedChunk?.sha256===digest','prepared.uploadedChunks','choose the same file again to resume'])assert.ok(page.includes(value),'missing '+value);
+ assert.ok(!page.includes("if(state.transfer.status==='uploading')await api('/api/transfers/'+transferId,{method:'DELETE'})"));
+});
+
+test('phone browser delivery resumes verified OPFS chunks and avoids large in-memory fallback',()=>{
+ const page=html();
+ for(const value of ['createWritable({keepExistingData:true})','position:index*chunkSize','existing.slice(offset,offset+expected)','meta.sha256','fileSize>256*1024*1024','persistent file storage'])assert.ok(page.includes(value),'missing '+value);
 });

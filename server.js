@@ -471,10 +471,17 @@ app.get('/api/transfers/:transferId',rateLimit(120,60*1000),async(req,res)=>{
   const user=await requireOwner(req,res);if(!user)return;
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Transfer service is not configured.'});
   try{
-    const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,file_name,size_bytes,status,error_message,created_at,updated_at,completed_at').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
+    const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,device_id,target_client_id,direction,file_name,mime_type,size_bytes,chunk_size,chunk_count,status,error_message,created_at,updated_at,completed_at').eq('id',req.params.transferId).eq('user_id',user.id).maybeSingle();
     if(error)throw error;
     if(!data)return res.status(404).json({ok:false,error:'Transfer not found.'});
-    return res.json({ok:true,transfer:{id:data.id,name:data.file_name,size:Number(data.size_bytes),status:data.status,error:data.error_message,createdAt:data.created_at,updatedAt:data.updated_at,completedAt:data.completed_at}});
+    let chunks=[],uploadedChunks=[];
+    if(req.query.manifest==='1'){
+      const {data:rows,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,size_bytes,sha256').eq('transfer_id',data.id).order('chunk_index',{ascending:true});
+      if(chunkError)throw chunkError;
+      chunks=(rows||[]).map(x=>({index:x.chunk_index,sizeBytes:x.size_bytes,sha256:x.sha256}));
+      uploadedChunks=chunks.map(x=>x.index);
+    }
+    return res.json({ok:true,transfer:{id:data.id,deviceId:data.device_id,targetClientId:data.target_client_id,direction:data.direction,name:data.file_name,type:data.mime_type,size:Number(data.size_bytes),chunkSize:data.chunk_size,chunkCount:data.chunk_count,status:data.status,error:data.error_message,createdAt:data.created_at,updatedAt:data.updated_at,completedAt:data.completed_at,...(req.query.manifest==='1'?{chunks,uploadedChunks}:{})}});
   }catch(_){return res.status(503).json({ok:false,error:'Could not check transfer status.'});}
 });
 

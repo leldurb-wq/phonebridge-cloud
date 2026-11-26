@@ -35,6 +35,14 @@ function reportAgentEvent(event,error){
     fs.appendFileSync(logPath,new Date().toISOString()+' '+String(event).slice(0,40)+(detail?': '+detail:'')+String.fromCharCode(10),{mode:0o600});
   }catch{}
 }
+function resolveDocumentsDirectory(){
+  try{
+    const value=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','[Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)'],{encoding:'utf8',windowsHide:true,stdio:'pipe'}).trim();
+    if(value&&path.isAbsolute(value))return path.resolve(value);
+  }catch(_){}
+  return path.join(os.homedir(),'Documents');
+}
+
 const MAX_CLOUD_RESPONSE_BYTES = 1024 * 1024;
 const cloudHttpsAgent = new https.Agent({keepAlive:true,maxSockets:6,maxFreeSockets:3,timeout:60000});
 
@@ -167,7 +175,7 @@ async function main() {
         let chunksSinceHeartbeat=0;
         const received=await receiveTransfer({
           transfer,
-          baseDir:path.join(os.homedir(),'Documents','PhoneBridge','Incoming'),
+          baseDir:path.join(resolveDocumentsDirectory(),'PhoneBridge','Incoming'),
           downloadChunk:async(id,index)=>{
             if(chunksSinceHeartbeat++%3===0)await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
             return getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
