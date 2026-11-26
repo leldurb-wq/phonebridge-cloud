@@ -10,6 +10,9 @@ const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const { serveChunkedFile } = require('./lib/chunked-range');
+const { createChunkCache } = require('./lib/chunk-cache');
+const { classifyMedia, directPlayCandidate, mediaContentType } = require('./lib/media-formats');
+const transferChunkCache = createChunkCache({ maxBytes: 32 * 1024 * 1024 });
 const ffmpegPath = require('ffmpeg-static');
 const { createClient } = require('@supabase/supabase-js');
 const { generatePairingCode, hashEnrollmentCode, hashLegacyPairingCode } = require('./agent/pairing-code');
@@ -45,6 +48,7 @@ app.use(helmet({
       scriptSrc:["'self'","'unsafe-inline'",'https://esm.sh','https://cdn.jsdelivr.net'],
       styleSrc:["'self'","'unsafe-inline'"],
       imgSrc:["'self'",'data:','blob:','https:'],
+      mediaSrc:["'self'",'blob:','https://*.supabase.co'],
       connectSrc:["'self'",'http://127.0.0.1:32145','https://*.supabase.co','wss://*.supabase.co'],
       frameAncestors:["'none'"],
       baseUri:["'self'"],
@@ -276,22 +280,50 @@ app.post('/api/preview-session',rateLimit(30,10*60*1000),async(req,res)=>{
     if(error)throw error;
     if(!file)return res.status(404).json({ok:false,error:'That media file was not found in your Drive.'});
     const name=cleanFileName(file.original_name),mime=String(file.mime_type||'').toLowerCase();
-    const audio=/\.(mp3|m4a|wav|aac|flac|ogg|opus|oga|wma|aiff|aif)$/i.test(name)||mime.startsWith('audio/');
-    const video=/\.(mp4|m4v|mov|webm|ogv|3gp|3g2|mpeg|mpg|mpe|m2v|avi|mkv|wmv|flv|f4v|ts|m2ts|mts|vob)$/i.test(name)||mime.startsWith('video/');
-    if(!audio&&!video)return res.status(415).json({ok:false,error:'This file is not a supported audio or video format.'});
-    if(!ffmpegPath)return res.status(503).json({ok:false,error:'PhoneBridge media conversion is not installed on this server yet.'});
+    const kind=classifyMedia(name,mime);
+    if(!kind)return res.status(415).json({ok:false,error:'This file is not a supported audio or video format.'});
     for(const [token,session] of mediaPreviewSessions){
       if(session.expiresAt<Date.now()&&!session.promise){mediaPreviewSessions.delete(token);if(session.dir)fs.promises.rm(session.dir,{recursive:true,force:true}).catch(()=>{})}
     }
     const token=crypto.randomBytes(24).toString('hex');
-    mediaPreviewSessions.set(token,{userId:user.id,file,kind:audio?'audio':'video',expiresAt:Date.now()+30*60*1000,createdAt:Date.now(),promise:null,outputPath:null,dir:null});
-    return res.json({ok:true,url:'/api/media-preview/'+token,kind:audio?'audio':'video',expiresIn:1800});
+    mediaPreviewSessions.set(token,{userId:user.id,file,kind,directPlay:directPlayCandidate(name),expiresAt:Date.now()+30*60*1000,createdAt:Date.now(),promise:null,outputPath:null,dir:null});
+    return res.json({ok:true,url:'/api/media-stream/'+token,kind,expiresIn:1800});
   }catch(error){
     console.error('[PhoneBridge media preview session]',error?.message||error);
     return res.status(503).json({ok:false,error:'Could not prepare this media preview.'});
   }
 });
-app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),async(req,res)=>{
+async function serveOriginalMedia(session,req,res){
+  const file=session.file,name=cleanFileName(file.original_name);
+  const disposition="inline; filename*=UTF-8''"+encodeURIComponent(name);
+  const contentType=mediaContentType(name,file.mime_type,session.kind);
+  if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
+    const transferId=file.object_path.slice(TRANSFER_DRIVE_PREFIX.length);
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,status,size_bytes,chunk_count').eq('id',transferId).eq('user_id',session.userId).maybeSingle();
+    if(error)throw error;
+    if(!transfer||transfer.status!=='completed')throw new Error('The original media transfer is not complete yet.');
+    const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,object_path,sha256,size_bytes').eq('transfer_id',transferId).order('chunk_index',{ascending:true});
+    if(chunkError)throw chunkError;
+    if(!chunks?.length||chunks.length!==Number(transfer.chunk_count)||chunks.reduce((sum,c)=>sum+Number(c.size_bytes),0)!==Number(file.size_bytes))throw new Error('The original media file is incomplete in Drive.');
+    chunks.forEach((chunk,index)=>{if(chunk.chunk_index!==index)throw new Error('The original media manifest has a missing chunk.')});
+    const etag='"pb-'+crypto.createHash('sha256').update(chunks.map(chunk=>chunk.sha256).join(':')).digest('hex')+'"';
+    await serveChunkedFile({req,res,chunks,size:Number(file.size_bytes),contentType,disposition,etag,fetchChunk:chunk=>transferChunkCache.get(chunk.sha256,async()=>{
+      const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
+      if(downloadError||!data)throw downloadError||new Error('An original media chunk is missing from storage.');
+      const buffer=Buffer.from(await data.arrayBuffer());
+      if(buffer.length!==Number(chunk.size_bytes)||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('An original media chunk failed integrity verification.');
+      return buffer;
+    })});
+    return;
+  }
+  const {data,error}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,300);
+  if(error||!data?.signedUrl)throw error||new Error('Could not create a secure media stream URL.');
+  res.setHeader('Cache-Control','private, no-store');
+  res.setHeader('Content-Type',contentType);
+  res.setHeader('Content-Disposition',disposition);
+  return res.redirect(302,data.signedUrl);
+}
+async function handleMediaStream(req,res){
   res.setHeader('Cache-Control','private, no-store');
   const token=String(req.params.token||'');
   if(!/^[a-f0-9]{48}$/.test(token))return res.status(404).end();
@@ -301,6 +333,13 @@ app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),async(req,res)=>{
     return res.status(410).json({ok:false,error:'This media preview expired. Reopen the file to create a new preview.'});
   }
   try{
+    const convert=req.query.convert==='1'||!session.directPlay;
+    if(!convert){
+      session.expiresAt=Date.now()+30*60*1000;
+      await serveOriginalMedia(session,req,res);
+      return;
+    }
+    if(!ffmpegPath)return res.status(503).json({ok:false,error:'Media conversion is unavailable on this server. You can still download the original file.'});
     if(!session.outputPath){
       if(!session.promise)session.promise=buildBrowserMedia(session).finally(()=>{session.promise=null});
       await session.promise;
@@ -308,15 +347,18 @@ app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),async(req,res)=>{
     session.expiresAt=Date.now()+30*60*1000;
     res.setHeader('Content-Type',session.kind==='audio'?'audio/mpeg':'video/mp4');
     res.setHeader('Content-Disposition','inline; filename="'+(session.kind==='audio'?'phonebridge-audio.mp3':'phonebridge-video.mp4')+'"');
-    res.setHeader('Accept-Ranges','bytes');
     return res.sendFile(session.outputPath,{dotfiles:'deny'},error=>{
       if(error&&!res.headersSent){console.error('[PhoneBridge media preview response]',error.message);res.status(error.statusCode||500).end()}
     });
   }catch(error){
-    console.error('[PhoneBridge media conversion]',error?.message||error);
-    return res.status(422).json({ok:false,error:'PhoneBridge could not decode or convert this media. The original file remains unchanged in Drive.'});
+    console.error('[PhoneBridge media stream]',error?.message||error);
+    if(res.headersSent)return res.destroy(error);
+    return res.status(422).json({ok:false,error:'PhoneBridge could not play or convert this media. Your original file remains unchanged in Drive. Download the original to open it in another player.'});
   }
-});
+}
+app.get('/api/media-stream/:token',rateLimit(1200,10*60*1000),handleMediaStream);
+// Retain the old route for preview links created by clients before an update.
+app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),handleMediaStream);
 async function streamDriveDownload(userId,id,req,res){
   res.setHeader('Cache-Control','private, no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -337,31 +379,21 @@ async function streamDriveDownload(userId,id,req,res){
       if(chunkError)throw chunkError;
       if(!chunks?.length||chunks.length!==transfer.chunk_count||chunks.reduce((total,chunk)=>total+Number(chunk.size_bytes),0)!==Number(file.size_bytes))throw new Error('Drive file chunks are incomplete.');
       chunks.forEach((chunk,index)=>{if(chunk.chunk_index!==index)throw new Error('Drive file has a missing chunk.')});
-      await serveChunkedFile({req,res,chunks,size:Number(file.size_bytes),contentType:file.mime_type||'application/octet-stream',disposition,etag:'"pb-'+transferId+'-'+Number(file.size_bytes)+'"',fetchChunk:async chunk=>{
+      const etag='"pb-'+crypto.createHash('sha256').update(chunks.map(chunk=>chunk.sha256).join(':')).digest('hex')+'"';
+      await serveChunkedFile({req,res,chunks,size:Number(file.size_bytes),contentType:file.mime_type||'application/octet-stream',disposition,etag,fetchChunk:chunk=>transferChunkCache.get(chunk.sha256,async()=>{
         const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
         if(downloadError||!data)throw downloadError||new Error('Drive chunk is missing.');
         const buffer=Buffer.from(await data.arrayBuffer());
         if(buffer.length!==Number(chunk.size_bytes)||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Drive chunk failed integrity verification.');
         return buffer;
-      }});
+      })});
       return;
     }
-    const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).download(file.object_path);
-    if(downloadError||!data)throw downloadError||new Error('File data is missing.');
-    const size=Number(file.size_bytes),mime=file.mime_type||'application/octet-stream',etag='"pb-'+id+'-'+size+'"';
-    if(req.headers.range){
-      const whole=Buffer.from(await data.arrayBuffer());
-      if(whole.length!==size)throw new Error('Stored file size does not match its record.');
-      await serveChunkedFile({req,res,chunks:[{size_bytes:size}],size,contentType:mime,disposition,etag,fetchChunk:async()=>whole});
-      return;
-    }
-    res.setHeader('Content-Type',mime);res.setHeader('Content-Length',String(size));res.setHeader('Content-Disposition',disposition);res.setHeader('Accept-Ranges','bytes');res.setHeader('ETag',etag);
-    if(data.stream&&typeof data.stream==='function'){
-      await pipeline(Readable.fromWeb(data.stream()),res);
-      return;
-    }
-    const buffer=Buffer.from(await data.arrayBuffer());
-    return res.status(200).end(buffer);
+    // Let private Storage serve byte ranges directly. Download sessions are
+    // owner-scoped and short-lived; the signed URL is never stored in the app.
+    const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,300,{download:safeName});
+    if(downloadError||!data?.signedUrl)throw downloadError||new Error('Could not create a secure download URL.');
+    return res.redirect(302,data.signedUrl);
   }catch(error){
     if(res.destroyed)return;
     console.error('[PhoneBridge Drive download]',error?.message||error);

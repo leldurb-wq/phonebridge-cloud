@@ -320,7 +320,8 @@ test('mobile video previews open directly and downloads use expiring native down
  assert.ok(server.includes("app.get('/api/file-download/:token'"));
  assert.ok(server.includes('downloadSessions.set(token,{userId:user.id,fileId:id,expiresAt:now+DOWNLOAD_SESSION_TTL})'));
  assert.ok(server.includes("res.setHeader('Content-Disposition',disposition)"));
- assert.ok(server.includes('await pipeline(Readable.fromWeb(data.stream()),res)'));
+ assert.ok(server.includes("createSignedUrl(file.object_path,300,{download:safeName})"));
+ assert.ok(server.includes('return res.redirect(302,data.signedUrl)'));
  assert.ok(page.includes("fetch('/api/download-session'"));
  assert.ok(page.includes("const prefix='/api/file-download/'"));
  assert.ok(page.includes('a.href=data.url'));
@@ -332,6 +333,20 @@ test('mobile video previews open directly and downloads use expiring native down
  assert.ok(!page.includes('const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement(\'a\')'));
 });
 
+test('media streams serve originals first with a conversion fallback for browser-incompatible codecs',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
+ assert.ok(server.includes("app.get('/api/media-stream/:token',rateLimit(1200,10*60*1000),handleMediaStream)"));
+ assert.ok(server.includes('const convert=req.query.convert===\'1\'||!session.directPlay'));
+ assert.ok(server.includes('await serveOriginalMedia(session,req,res)'));
+ assert.ok(server.includes('createSignedUrl(file.object_path,300)'));
+ assert.ok(server.includes('transferChunkCache.get(chunk.sha256'));
+ assert.ok(server.includes('mediaSrc:["\'self\'",\'blob:\',\'https://*.supabase.co\']'));
+ assert.ok(page.includes('function mediaConversionFallback(url)'));
+ assert.ok(page.includes("target.searchParams.set('convert','1')"));
+ assert.ok(page.includes('function retryLibraryMedia(media,file,statusId)'));
+ assert.ok(page.includes('drivePreviewUrls.delete(failed.id)'));
+ assert.ok(page.includes("if(typeof handle.createWritable==='function')"));
+});
 test('browser upload recovery resumes from the server manifest after the same file is selected again',()=>{
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
  assert.ok(server.includes("req.query.manifest==='1'"));assert.ok(server.includes('uploadedChunks=chunks.map(x=>x.index)'));assert.ok(server.includes('target_client_id,direction,file_name'));
@@ -341,5 +356,5 @@ test('browser upload recovery resumes from the server manifest after the same fi
 
 test('phone browser delivery resumes verified OPFS chunks and avoids large in-memory fallback',()=>{
  const page=html();
- for(const value of ['createWritable({keepExistingData:true})','position:index*chunkSize','existing.slice(offset,offset+expected)','meta.sha256','fileSize>256*1024*1024','persistent file storage'])assert.ok(page.includes(value),'missing '+value);
+ for(const value of ['typeof handle.createWritable===\'function\'','createWritable({keepExistingData:true})','position:index*chunkSize','existing.slice(offset,offset+expected)','meta.sha256','fileSize>256*1024*1024','writable persistent file handle'])assert.ok(page.includes(value),'missing '+value);
 });
