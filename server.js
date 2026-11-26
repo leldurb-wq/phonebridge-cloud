@@ -883,9 +883,10 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
     const now = new Date().toISOString();
     const { data:claimed, error:claimError } = await supabaseAdmin.from('device_enrollments').update({ consumed_at:now }).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
     if (claimError || !claimed) return res.status(409).json({ ok:false, error:'Pairing code has already been used or expired.' });
-    const agentToken = crypto.randomBytes(32).toString('base64url');
-    const tokenHash = crypto.createHash('sha256').update(agentToken).digest('hex');
+    const previousAgentToken=typeof req.body?.previousAgentToken==='string'&&/^[A-Za-z0-9_-]{40,50}$/.test(req.body.previousAgentToken)?req.body.previousAgentToken:'';
+    let agentToken='';
     let deviceId='';
+    let reusedCredential=false;
     if(previousDeviceId){
       const {data:existing,error:lookupError}=await supabaseAdmin.from('devices').select('id').eq('id',previousDeviceId).eq('user_id',ticket.user_id).maybeSingle();
       if(lookupError)throw lookupError;
@@ -893,19 +894,37 @@ app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
         deviceId=existing.id;
         const {error:updateDeviceError}=await supabaseAdmin.from('devices').update({name:deviceName,device_type:'windows_agent'}).eq('id',deviceId).eq('user_id',ticket.user_id);
         if(updateDeviceError)throw updateDeviceError;
-        const {data:rotated,error:rotateError}=await supabaseAdmin.from('device_agents').update({token_hash:tokenHash,enabled:true,last_seen_at:null}).eq('device_id',deviceId).select('device_id').maybeSingle();
-        if(rotateError)throw rotateError;
-        if(!rotated){const {error:insertAgentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});if(insertAgentError)throw insertAgentError;}
+        const {data:currentAgent,error:agentLookupError}=await supabaseAdmin.from('device_agents').select('token_hash,enabled').eq('device_id',deviceId).maybeSingle();
+        if(agentLookupError)throw agentLookupError;
+        const suppliedHash=previousAgentToken?crypto.createHash('sha256').update(previousAgentToken).digest('hex'):'';
+        if(currentAgent?.enabled===true&&suppliedHash&&currentAgent.token_hash===suppliedHash){
+          agentToken=previousAgentToken;
+          reusedCredential=true;
+          const {error:touchError}=await supabaseAdmin.from('device_agents').update({last_seen_at:new Date().toISOString()}).eq('device_id',deviceId).eq('token_hash',suppliedHash).eq('enabled',true);
+          if(touchError)throw touchError;
+        }else{
+          agentToken=crypto.randomBytes(32).toString('base64url');
+          const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
+          if(currentAgent){
+            const {error:rotateError}=await supabaseAdmin.from('device_agents').update({token_hash:tokenHash,enabled:true,last_seen_at:null}).eq('device_id',deviceId);
+            if(rotateError)throw rotateError;
+          }else{
+            const {error:insertAgentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
+            if(insertAgentError)throw insertAgentError;
+          }
+        }
       }
     }
     if(!deviceId){
+      agentToken=crypto.randomBytes(32).toString('base64url');
+      const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
       const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:deviceName,device_type:'windows_agent'}).select('id').single();
       if(deviceError||!device)throw deviceError||new Error('Device record was not created.');
       deviceId=device.id;
       const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
       if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
     }
-    return res.status(201).json({ ok:true, deviceId, deviceName, agentToken });
+    return res.status(201).json({ ok:true, deviceId, deviceName, agentToken, reusedCredential });
   } catch (_) {
     return res.status(503).json({ ok:false, error:'Device enrollment could not be completed.' });
   }

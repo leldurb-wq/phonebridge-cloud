@@ -138,9 +138,10 @@ function waitForPairingCredentials(){
 }
 async function redeemApprovedCode(code,previous){
   const installationId=previous?.installationId||crypto.randomUUID();
-  const result=await postJson('/api/agent/enroll',{enrollmentCode:code,previousDeviceId:previous?.deviceId||null,deviceName:os.hostname().trim().slice(0,80)||'Windows computer'});
-  if(!result?.ok||!uuidPattern.test(result.deviceId||'')||!tokenPattern.test(result.agentToken||'')||typeof result.deviceName!=='string'||!result.deviceName.trim()||result.deviceName.length>80)throw new Error('PhoneBridge returned invalid device credentials.');
-  const value=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:result.agentToken,installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()});
+  const result=await postJson('/api/agent/enroll',{enrollmentCode:code,previousDeviceId:previous?.deviceId||null,previousAgentToken:previous?.agentToken||null,deviceName:os.hostname().trim().slice(0,80)||'Windows computer'});
+  const nextToken=result?.reusedCredential===true&&previous?.deviceId===result.deviceId&&tokenPattern.test(previous?.agentToken||'')?previous.agentToken:result?.agentToken;
+  if(!result?.ok||!uuidPattern.test(result.deviceId||'')||!tokenPattern.test(nextToken||'')||typeof result.deviceName!=='string'||!result.deviceName.trim()||result.deviceName.length>80)throw new Error('PhoneBridge returned invalid device credentials.');
+  const value=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:nextToken,installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()});
   writeCredentials(credentialPath,value,target=>secureCredentialPath(target,false));
   activeCredentials=value;
   publishPairingCredentials(value);
