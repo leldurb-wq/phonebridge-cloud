@@ -25,7 +25,7 @@ test('post-pairing opens the cinematic feature workspace only after a fresh onli
  assert.match(page,/showPage\('overview'\);toast\(online\.name\+' connected\. Your workspace is ready\.'\)/);
  assert.match(page,/class="pbx-feature-grid"/);
  assert.equal((page.match(/class="pbx-feature(?: is-limited)?"/g)||[]).length,11);
- for(const feature of ['File transfer','Private Drive','My devices','Audio files','Video files','Secure pairing','Help & privacy','Folder sync','Workspace notes','Screen access','Security controls'])assert.ok(page.includes('<strong>'+feature+'</strong>'),feature+' appears in the workspace');
+ for(const feature of ['File transfer','Private Drive','My devices','Audio files','Video files','Secure pairing','Help & privacy','Folder sync','Workspace notes','Live screen','Security controls'])assert.ok(page.includes('<strong>'+feature+'</strong>'),feature+' appears in the workspace');
  assert.match(page,/@keyframes pbx-orbit/);assert.match(page,/@keyframes pbx-card-enter/);assert.match(page,/pbx-workspace-enter/);
  assert.match(page,/body\[data-page\]:not\(\[data-page="overview"\]\) #workspace>#dynamicWorkspace/);
  assert.match(page,/body\[data-page="computer"\] #workspace>#deviceManager/);
@@ -168,21 +168,22 @@ test('the retained customer routing helper still distinguishes anonymous, signed
 });
 
 test('main PhoneBridge pages mark cloud file transfer and private Drive as available while retaining unsupported feature notices',()=>{
- const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Automatic folder sync, workspace notes, screen viewing and remote input are not included/);
+ const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Automatic folder sync, workspace notes and remote input are not included/);assert.match(page,/Live screen viewing is available/);
  assert.match(page,/updateUser\(\{email\}\)/);assert.match(page,/updateUser\(\{password\}\)/);assert.match(page,/openPhoneVideo/);assert.match(page,/phoneVideoPicker/);assert.match(page,/data-page-link=\"video\"/);assert.doesNotMatch(page,/\.nav a\[data-page-link=\\\"video\\\"\].*display:none!important/);
 });
 
-test('screen, mouse and keyboard controls stay out of the rendered computer page',()=>{
- const page=html();
- assert.match(page,/#computerPage> :not\(#cloudComputerWorkspace\)\{display:none!important\}/);
- assert.match(page,/screen viewing, mouse control and keyboard control are not available/i);
+test('live screen streaming is available while remote mouse and keyboard controls remain disabled',()=>{
+ const page=html(),server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ assert.match(page,/#computerPage> :not\(#cloudComputerWorkspace\):not\(#liveScreenAccess\)\{display:none!important\}/);
+ assert.match(page,/getDisplayMedia/);assert.match(page,/RTCPeerConnection/);assert.match(page,/screenShareStart/);assert.match(page,/screenWatch/);assert.match(page,/Stop streaming/);assert.match(page,/remote mouse and keyboard control are not included/i);
+ assert.match(server,/screenSessions=new Map/);assert.match(server,/app\.post\('\/api\/screen-sessions'/);assert.match(server,/app\.get\('\/api\/screen-sessions\/:sessionId\/signals'/);assert.match(server,/requireOwner\(req,res\)/);
  assert.doesNotMatch(page,/Agent Console|openAgentConsole/);
 });
 
 test('main PhoneBridge computer view keeps pairing and status without task tools or history',()=>{
  const page=html();const detail=page.slice(page.indexOf('id="cloudComputerWorkspace"'),page.indexOf('</section>',page.indexOf('id="cloudComputerWorkspace"')));
  assert.match(page,/id="phonePanel"/);assert.match(page,/id="deviceManager"/);assert.match(page,/id="legacyDeviceList"/);
- assert.match(detail,/View the paired computer connection status/);assert.doesNotMatch(detail,/systemInfo|listFiles|readFile|writeFile|createFolder|launchApp|commandList|Recent tasks|remote-keyboard-toggle|screenFrame/);
+ assert.match(detail,/View your paired computer and stream its screen to your phone/);assert.doesNotMatch(detail,/systemInfo|listFiles|readFile|writeFile|createFolder|launchApp|commandList|Recent tasks|remote-keyboard-toggle|screenFrame/);
 });
 
 test('cloud customer API disables tasks while preserving authenticated device heartbeat',()=>{
