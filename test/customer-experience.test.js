@@ -17,6 +17,12 @@ test('cloud entrypoint presents the refreshed customer PhoneBridge navigation an
  assert.match(page,/welcomePairButton/);assert.match(page,/feature-open/);assert.match(page,/PHONE-FIRST DASHBOARD/);assert.doesNotMatch(page,/Dual AI|AI Control Room|Agent Console|openAgentConsole/);
 });
 
+test('legacy sidebar and mobile tab navigation stay hidden in the cloud workspace',()=>{
+ const page=html();
+ assert.match(page,/\.phonebridge-workspace>\.nav,\.phonebridge-workspace>\.mobile-tabbar\{display:none!important\}/);
+ assert.match(page,/document\.querySelector\('\.nav'\)\.hidden=true;document\.querySelector\('\.mobile-tabbar'\)\.hidden=true/);
+});
+
 test('post-pairing opens the cinematic feature workspace only after a fresh online check-in',()=>{
  const page=html();
  assert.match(page,/const online=\(devices\|\|\[\]\)\.find\(device=>device\.connected&&\(!pairingBaseline\.has\(device\.id\)\|\|device\.lastSeenAt!==pairingBaseline\.get\(device\.id\)\)\)/);

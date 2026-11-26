@@ -665,8 +665,8 @@ body[data-page]:before{opacity:.13;background-image:linear-gradient(#7ddcff12 1p
 .status{background:#0b302c;border-color:#1c6558;color:#7bf0cf}
 .phonebridge-workspace{margin:0;padding:0 34px 50px;border:0;border-radius:0;background:transparent;min-height:calc(100vh - 78px)}
 .phonebridge-workspace>p{display:none}
-/* Customer navigation and media pages remain available in the cloud workspace. */
-.phonebridge-workspace>.nav,.phonebridge-workspace>.mobile-tabbar{display:flex!important}
+/* Legacy sidebar and tab navigation were removed from the PhoneBridge experience. Keep their DOM hooks hidden for compatibility with existing page logic. */
+.phonebridge-workspace>.nav,.phonebridge-workspace>.mobile-tabbar{display:none!important}
 #audioPlayerPage,#videoPlayerPage{display:none}
 .nav{position:fixed;z-index:90;left:0;top:0;bottom:0;width:260px;display:flex;flex-direction:column;align-items:stretch;gap:5px;overflow-y:auto;overflow-x:hidden;padding:98px 15px 170px;background:#081526;border-right:1px solid #1d3855;box-shadow:12px 0 38px #0002;scrollbar-width:thin}
 .nav-group-label{padding:15px 12px 5px;color:#6283a5;font-size:9px;font-weight:800;letter-spacing:1.8px}
@@ -1653,7 +1653,7 @@ $('passwordUpdateForm').addEventListener('submit',async event=>{event.preventDef
 async function init(){
   info=null;isHost=false;
   $('workspace').classList.remove('hidden');$('pairScreen').classList.remove('hidden');
-  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');document.querySelector('.nav').hidden=false;document.querySelector('.mobile-tabbar').hidden=false;phoneClient=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);$('computerPairControls').classList.toggle('hidden',phoneClient);$('phonePairControls').classList.toggle('hidden',!phoneClient);
+  $('phonePanel').classList.remove('hidden');$('deviceManager').classList.remove('hidden');document.querySelector('.nav').hidden=true;document.querySelector('.mobile-tabbar').hidden=true;phoneClient=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);$('computerPairControls').classList.toggle('hidden',phoneClient);$('phonePairControls').classList.toggle('hidden',!phoneClient);
   $('deviceRole').textContent='PhoneBridge account';setBridgeStatus('Cloud online');setConnectionState('online');
   $('cloudStageNotice').hidden=false;$('setupOverall').textContent='Cloud connection';
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
