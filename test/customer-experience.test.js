@@ -300,7 +300,8 @@ test('Drive media previews use short-lived authenticated streaming sessions and 
  const page=html(),server=fs.readFileSync(path.join(root,'server.js'),'utf8'),pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
  assert.ok(page.includes('async function authenticatedDrivePreviewUrl(id,name)'));
  assert.ok(page.includes("fetch('/api/preview-session'"));
- assert.ok(page.includes("headers:{...headers(),'Content-Type':'application/json'}"));
+ assert.ok(page.includes("const previewHeaders=headers({'Content-Type':'application/json'});"));
+ assert.ok(page.includes("if(accountSession?.access_token)h.set('Authorization','Bearer '+accountSession.access_token)"));
  assert.ok(page.includes('async function playMedia(kind,id)'));
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(f.id,f.name)'));
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(id,f.name)'));

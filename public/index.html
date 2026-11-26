@@ -1897,7 +1897,8 @@ async function authenticatedDrivePreviewUrl(id,name){
  const cached=drivePreviewUrls.get(id);if(cached)return cached;
  const mediaKind=fileKind(name);
  if(mediaKind==='videos'||mediaKind==='audio'){
-  const response=await fetch('/api/preview-session',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({id}),credentials:'same-origin',cache:'no-store'});
+  const previewHeaders=headers({'Content-Type':'application/json'});
+  const response=await fetch('/api/preview-session',{method:'POST',headers:previewHeaders,body:JSON.stringify({id}),credentials:'same-origin',cache:'no-store'});
   if(!response.ok){let data={};try{data=await response.json()}catch{}throw Error(data.error||'Could not prepare browser-compatible media ('+response.status+').')}
   const data=await response.json(),url=data.url;
   drivePreviewUrls.set(id,url);
