@@ -1895,11 +1895,20 @@ let driveFiles=[],driveFolders=[''],pcPairedDevices=[];
 const drivePreviewUrls=new Map();
 async function authenticatedDrivePreviewUrl(id,name){
  const cached=drivePreviewUrls.get(id);if(cached)return cached;
+ const mediaKind=fileKind(name);
+ if(mediaKind==='videos'||mediaKind==='audio'){
+  const response=await fetch('/api/preview-session',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({id}),credentials:'same-origin',cache:'no-store'});
+  if(!response.ok){let data={};try{data=await response.json()}catch{}throw Error(data.error||'Could not prepare browser-compatible media ('+response.status+').')}
+  const data=await response.json(),url=data.url;
+  drivePreviewUrls.set(id,url);
+  while(drivePreviewUrls.size>6){const oldest=drivePreviewUrls.keys().next().value;drivePreviewUrls.delete(oldest)}
+  return url;
+ }
  const response=await fetch('/api/download?id='+encodeURIComponent(id),{headers:headers(),credentials:'same-origin',cache:'no-store'});
- if(!response.ok){let data={};try{data=await response.json()}catch{}throw Error(data.error||'Could not load this media file ('+response.status+').')}
+ if(!response.ok){let data={};try{data=await response.json()}catch{}throw Error(data.error||'Could not load this file ('+response.status+').')}
  const original=await response.blob(),mime=fileMimeType(name,original.type),blob=new Blob([original],{type:mime}),url=URL.createObjectURL(blob);
  drivePreviewUrls.set(id,url);
- while(drivePreviewUrls.size>6){const oldest=drivePreviewUrls.keys().next().value,oldUrl=drivePreviewUrls.get(oldest);drivePreviewUrls.delete(oldest);URL.revokeObjectURL(oldUrl)}
+ while(drivePreviewUrls.size>6){const oldest=drivePreviewUrls.keys().next().value,oldUrl=drivePreviewUrls.get(oldest);drivePreviewUrls.delete(oldest);if(oldUrl.startsWith('blob:'))URL.revokeObjectURL(oldUrl)}
  return url;
 }
 function closeFilePreview(){const box=$('previewOverlay'),stage=$('previewStage');stage.querySelectorAll('video,audio').forEach(m=>{m.pause();m.removeAttribute('src');m.load()});stage.replaceChildren();box.classList.add('hidden');document.body.classList.remove('preview-open')}
@@ -1926,7 +1935,7 @@ function previewTable(stage,rows,title){
 async function renderFilePreview(name,url,stage){
  const ext=(name.split('.').pop()||'').toLowerCase(),kind=fileKind(name);stage.replaceChildren();
  if(kind==='images'&&!['heic','heif'].includes(ext)){const img=document.createElement('img');img.className='preview-image';img.alt=name;img.src=url;img.onerror=()=>{stage.replaceChildren();previewTextBlock(stage,'This image format could not be decoded by this browser. Download the original file to open it.')} ;stage.appendChild(img);return}
- if(kind==='videos'||kind==='audio'){const media=document.createElement(kind==='videos'?'video':'audio');media.className=kind==='videos'?'preview-video':'preview-audio';media.controls=true;media.playsInline=true;media.preload='metadata';media.src=url;media.onerror=()=>{const note=document.createElement('p');note.className='empty';note.textContent='This browser cannot play this media codec. Download the original file and open it with a media player.';stage.appendChild(note)};stage.appendChild(media);return}
+ if(kind==='videos'||kind==='audio'){const media=document.createElement(kind==='videos'?'video':'audio');media.className=kind==='videos'?'preview-video':'preview-audio';media.controls=true;media.playsInline=true;media.preload='metadata';media.src=url;media.onerror=()=>{const note=document.createElement('p');note.className='empty';note.textContent='PhoneBridge could not prepare a browser-ready version of this media. Your original file is still safe in Drive.';stage.appendChild(note)};stage.appendChild(media);return}
  if(ext==='pdf'){const frame=document.createElement('iframe');frame.className='preview-document';frame.title=name;frame.src=url;stage.appendChild(frame);return}
  const response=await fetch(url,{headers:headers(),credentials:'same-origin',cache:'no-store'});if(!response.ok)throw Error('Could not load the file for preview ('+response.status+').');
  if(['txt','csv','json','xml','md','log','rtf','html','htm','js','css','py','sql','yaml','yml','ini','cfg','ts','tsx','jsx','java','c','cpp','h','sh'].includes(ext)){
@@ -1998,7 +2007,7 @@ document.querySelectorAll('[data-audio-filter]').forEach(b=>b.addEventListener('
 document.querySelectorAll('[data-video-filter]').forEach(b=>b.addEventListener('click',()=>{videoFilter=b.dataset.videoFilter;document.querySelectorAll('[data-video-filter]').forEach(x=>x.classList.toggle('active',x===b));renderMediaList('video')}));
 $('audioPrev').onclick=()=>stepMedia('audio',-1);$('audioNext').onclick=()=>stepMedia('audio',1);$('audioDownload').onclick=async()=>{if(audioIndex<0)return toast('Choose an audio file first');try{await downloadOne(audioQueue[audioIndex].id);toast('Audio download started')}catch(error){toast(error.message)}};$('videoDownload').onclick=async()=>{if(videoIndex<0)return toast('Choose a video first');try{await downloadOne(videoQueue[videoIndex].id);toast('Video download started')}catch(error){toast(error.message)}};
 $('audioElement').addEventListener('ended',()=>stepMedia('audio',1));$('audioElement').addEventListener('play',()=>$('audioPlaybackStatus').textContent='Playing now');$('audioElement').addEventListener('pause',()=>{if(!$('audioElement').ended)$('audioPlaybackStatus').textContent='Paused'});
-$('videoElement').addEventListener('ended',()=>stepMedia('video',1));$('videoElement').addEventListener('error',()=>{if(videoIndex>=0)toast('This browser cannot decode this video format. Use Download Video to save and play the original file.')});$('audioElement').addEventListener('error',()=>{if(audioIndex>=0)$('audioPlaybackStatus').textContent='This browser cannot decode this audio format. Use Download to save the original file.'});
+$('videoElement').addEventListener('ended',()=>stepMedia('video',1));$('videoElement').addEventListener('error',()=>{if(videoIndex>=0)toast('PhoneBridge could not prepare this video for playback. Your original remains in Drive.')});$('audioElement').addEventListener('error',()=>{if(audioIndex>=0)$('audioPlaybackStatus').textContent='PhoneBridge could not prepare this audio for playback. Your original remains in Drive.'});
 
 async function refresh(){try{const d=await api('/api/files');driveFiles=d.files||[];driveFolders=d.folders||[''];const used=d.storage?.used||0,limit=d.storage?.limit||1,pct=Math.min(100,used/limit*100);say('storageText',size(used)+' of '+size(limit)+' | '+pct.toFixed(1)+'%');$('storageBar').style.width=pct+'%';const sel=$('driveFolder'),old=sel.value;sel.innerHTML='<option value="*">All folders</option><option value="">Unfiled</option>'+driveFolders.filter(Boolean).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');sel.value=[...sel.options].some(o=>o.value===old)?old:'*';renderDrive();renderMediaLibraries()}catch(e){say('fileCount','Drive unavailable');$('files').innerHTML='<div class="empty"><b>Could not load Drive</b>'+esc(e.message)+'</div>'}}
 ['driveSearch','driveFolder','driveSort','driveFilter'].forEach(id=>$(id).addEventListener(id==='driveSearch'?'input':'change',renderDrive));

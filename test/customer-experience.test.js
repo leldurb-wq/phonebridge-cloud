@@ -296,16 +296,17 @@ test('device enrollment records the ticket owner and consumes an unexpired ticke
  assert.match(redeem,/\.is\('consumed_at',null\)\.gt\('expires_at',new Date\(\)\.toISOString\(\)\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)\.eq\('id',ticket\.id\)\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);assert.match(redeem,/user_id:ticket\.user_id/);
 });
 
-test('Drive video, audio and previews fetch media with account authorization before using browser object URLs',()=>{
- const page=html();
+test('Drive media previews use short-lived authenticated streaming sessions and browser-ready transcoding',()=>{
+ const page=html(),server=fs.readFileSync(path.join(root,'server.js'),'utf8'),pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
  assert.ok(page.includes('async function authenticatedDrivePreviewUrl(id,name)'));
- assert.ok(page.includes("fetch('/api/download?id='+encodeURIComponent(id)"));
- assert.ok(page.includes("headers:headers(),credentials:'same-origin'"));
- assert.ok(page.includes('new Blob([original],{type:mime})'));
+ assert.ok(page.includes("fetch('/api/preview-session'"));
+ assert.ok(page.includes("headers:{...headers(),'Content-Type':'application/json'}"));
  assert.ok(page.includes('async function playMedia(kind,id)'));
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(f.id,f.name)'));
  assert.ok(page.includes('const url=await authenticatedDrivePreviewUrl(id,f.name)'));
- assert.ok(!page.includes('/api/preview?id='));
+ assert.ok(server.includes("app.post('/api/preview-session'"));assert.ok(server.includes("app.get('/api/media-preview/:token'"));
+ assert.ok(server.includes("require('ffmpeg-static')"));assert.ok(server.includes("'libx264'"));assert.ok(server.includes("'libmp3lame'"));assert.ok(server.includes("'yuv420p'"));assert.ok(server.includes('res.sendFile(session.outputPath'));
+ assert.equal(pkg.dependencies['ffmpeg-static']!==undefined,true);
 });
 
 
