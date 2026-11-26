@@ -135,6 +135,62 @@ async function requireOwner(req, res) {
   }
 }
 
+// Short-lived, owner-scoped WebRTC signaling for live screen viewing.
+const screenSessions=new Map();
+const SCREEN_SESSION_TTL=5*60*1000;
+setInterval(()=>{const now=Date.now();for(const [id,s] of screenSessions)if(s.expiresAt<=now)screenSessions.delete(id)},30000).unref();
+app.post('/api/screen-sessions',rateLimit(8,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  const deviceId=String(req.body?.deviceId||'');
+  if(!/^[0-9a-f-]{36}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a paired computer first.'});
+  try{
+    const {data:device,error}=await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;if(!device)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});
+    for(const [id,s] of screenSessions)if(s.ownerId===user.id&&s.deviceId===deviceId)screenSessions.delete(id);
+    const id=crypto.randomUUID(),now=Date.now();
+    screenSessions.set(id,{id,ownerId:user.id,deviceId,createdAt:now,expiresAt:now+SCREEN_SESSION_TTL,viewerJoined:false,signals:{publisher:[],viewer:[]}});
+    return res.status(201).json({ok:true,sessionId:id,expiresAt:new Date(now+SCREEN_SESSION_TTL).toISOString()});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not create a secure screen session.'})}
+});
+app.get('/api/devices/:deviceId/screen-session',rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  const deviceId=req.params.deviceId;
+  try{
+    const {data:device,error}=await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;if(!device)return res.status(404).json({ok:false,error:'Paired computer not found.'});
+    const session=[...screenSessions.values()].find(s=>s.deviceId===deviceId&&s.ownerId===user.id&&s.expiresAt>Date.now());
+    return res.json({ok:true,session:session?{id:session.id,expiresAt:new Date(session.expiresAt).toISOString()}:null});
+  }catch(_){return res.status(503).json({ok:false,error:'Could not check screen sharing status.'})}
+});
+app.post('/api/screen-sessions/:sessionId/signals',rateLimit(180,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  const session=screenSessions.get(req.params.sessionId);if(!session||session.ownerId!==user.id||session.expiresAt<=Date.now())return res.status(404).json({ok:false,error:'Screen session expired. Start sharing again.'});
+  const role=req.body?.role,type=req.body?.type,payload=req.body?.payload;
+  if(!['publisher','viewer'].includes(role)||!['offer','answer','ice','ready'].includes(type)||JSON.stringify(payload??null).length>12000)return res.status(400).json({ok:false,error:'Invalid screen connection signal.'});
+  const target=role==='publisher'?'viewer':'publisher';
+  if(session.signals[target].length>=120)return res.status(429).json({ok:false,error:'Screen connection is receiving too many signals.'});
+  session.signals[target].push({type,payload:payload??null,at:Date.now()});if(role==='viewer'){session.viewerJoined=true;session.expiresAt=Date.now()+30000;}
+  return res.json({ok:true});
+});
+app.get('/api/screen-sessions/:sessionId/signals',rateLimit(360,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  const session=screenSessions.get(req.params.sessionId);if(!session||session.ownerId!==user.id||session.expiresAt<=Date.now())return res.status(404).json({ok:false,error:'Screen session expired. Start sharing again.'});
+  const role=String(req.query.role||'');
+  if(!['publisher','viewer'].includes(role))return res.status(400).json({ok:false,error:'Invalid screen connection role.'});
+  const signals=session.signals[role].splice(0,40);if(role==='viewer'){session.viewerJoined=true;session.expiresAt=Date.now()+30000;}
+  return res.json({ok:true,signals,expiresAt:new Date(session.expiresAt).toISOString()});
+});
+app.delete('/api/screen-sessions/:sessionId',rateLimit(20,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  const session=screenSessions.get(req.params.sessionId);if(session&&session.ownerId===user.id)screenSessions.delete(req.params.sessionId);
+  return res.json({ok:true});
+});
+
 // Owner-authenticated cloud file storage. Objects are private and always scoped
 // to the signed-in account; the service-role key never leaves this server.
 const FILE_BUCKET='user-files';
