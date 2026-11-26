@@ -9,6 +9,7 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
+const { serveChunkedFile } = require('./lib/chunked-range');
 const ffmpegPath = require('ffmpeg-static');
 const { createClient } = require('@supabase/supabase-js');
 const { generatePairingCode, hashEnrollmentCode, hashLegacyPairingCode } = require('./agent/pairing-code');
@@ -316,7 +317,7 @@ app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),async(req,res)=>{
     return res.status(422).json({ok:false,error:'PhoneBridge could not decode or convert this media. The original file remains unchanged in Drive.'});
   }
 });
-async function streamDriveDownload(userId,id,res){
+async function streamDriveDownload(userId,id,req,res){
   res.setHeader('Cache-Control','private, no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
@@ -335,22 +336,26 @@ async function streamDriveDownload(userId,id,res){
       const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,object_path,sha256,size_bytes').eq('transfer_id',transferId).order('chunk_index',{ascending:true});
       if(chunkError)throw chunkError;
       if(!chunks?.length||chunks.length!==transfer.chunk_count||chunks.reduce((total,chunk)=>total+Number(chunk.size_bytes),0)!==Number(file.size_bytes))throw new Error('Drive file chunks are incomplete.');
-      res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(file.size_bytes));res.setHeader('Content-Disposition',disposition);
-      for(let index=0;index<chunks.length;index++){
-        if(res.destroyed)return;
-        const chunk=chunks[index];if(chunk.chunk_index!==index)throw new Error('Drive file has a missing chunk.');
+      chunks.forEach((chunk,index)=>{if(chunk.chunk_index!==index)throw new Error('Drive file has a missing chunk.')});
+      await serveChunkedFile({req,res,chunks,size:Number(file.size_bytes),contentType:file.mime_type||'application/octet-stream',disposition,etag:'"pb-'+transferId+'-'+Number(file.size_bytes)+'"',fetchChunk:async chunk=>{
         const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
         if(downloadError||!data)throw downloadError||new Error('Drive chunk is missing.');
         const buffer=Buffer.from(await data.arrayBuffer());
         if(buffer.length!==Number(chunk.size_bytes)||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Drive chunk failed integrity verification.');
-        if(!res.write(buffer))await new Promise(resolve=>{const done=()=>{res.off('drain',done);res.off('close',done);resolve()};res.once('drain',done);res.once('close',done)});
-      }
-      if(!res.destroyed)return res.end();
+        return buffer;
+      }});
       return;
     }
     const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).download(file.object_path);
     if(downloadError||!data)throw downloadError||new Error('File data is missing.');
-    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(file.size_bytes));res.setHeader('Content-Disposition',disposition);
+    const size=Number(file.size_bytes),mime=file.mime_type||'application/octet-stream',etag='"pb-'+id+'-'+size+'"';
+    if(req.headers.range){
+      const whole=Buffer.from(await data.arrayBuffer());
+      if(whole.length!==size)throw new Error('Stored file size does not match its record.');
+      await serveChunkedFile({req,res,chunks:[{size_bytes:size}],size,contentType:mime,disposition,etag,fetchChunk:async()=>whole});
+      return;
+    }
+    res.setHeader('Content-Type',mime);res.setHeader('Content-Length',String(size));res.setHeader('Content-Disposition',disposition);res.setHeader('Accept-Ranges','bytes');res.setHeader('ETag',etag);
     if(data.stream&&typeof data.stream==='function'){
       await pipeline(Readable.fromWeb(data.stream()),res);
       return;
@@ -390,11 +395,11 @@ app.get('/api/file-download/:token',rateLimit(120,10*60*1000),async(req,res)=>{
   if(!/^[a-f0-9]{64}$/.test(token))return res.status(404).end();
   const session=downloadSessions.get(token);
   if(!session||session.expiresAt<=Date.now()){downloadSessions.delete(token);return res.status(410).json({ok:false,error:'This download link expired. Request the download again.'})}
-  return streamDriveDownload(session.userId,session.fileId,res);
+  return streamDriveDownload(session.userId,session.fileId,req,res);
 });
 app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
   const user=await requireOwner(req,res);if(!user)return;
-  return streamDriveDownload(user.id,String(req.query.id||''),res);
+  return streamDriveDownload(user.id,String(req.query.id||''),req,res);
 });
 app.patch('/api/files',rateLimit(60,60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
