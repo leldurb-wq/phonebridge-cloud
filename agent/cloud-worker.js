@@ -10,6 +10,7 @@ const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, to
 const { runReconnectLoop } = require('./reconnect-loop');
 const { createLocalPairingBridge } = require('./local-pairing-bridge');
 const { receiveTransfer } = require('./file-transfer');
+const { captureScreenJpeg } = require('./screen-capture');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -165,6 +166,19 @@ async function main() {
     onApproved:code=>redeemApprovedCode(code,activeCredentials)
   });
   if(!credentials)credentials=await waitForPairingCredentials();
+  let screenCaptureStopped=false;
+  const screenCaptureLoop=(async()=>{
+    while(!screenCaptureStopped){
+      const current=activeCredentials;
+      if(current?.deviceId&&current?.agentToken){
+        try{
+          const frame=captureScreenJpeg();
+          await postJson('/api/agent/screen/frame',{deviceId:current.deviceId,imageBase64:frame.toString('base64')},current.agentToken);
+        }catch(error){reportAgentEvent('screen-capture',error);}
+      }
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  })();
   await runReconnectLoop({
     credentials,
     claim:async current=>{

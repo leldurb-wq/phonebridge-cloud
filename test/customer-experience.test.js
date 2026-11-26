@@ -168,21 +168,21 @@ test('the retained customer routing helper still distinguishes anonymous, signed
 });
 
 test('main PhoneBridge pages mark cloud file transfer and private Drive as available while retaining unsupported feature notices',()=>{
- const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Automatic folder sync, workspace notes, screen viewing and remote input are not included/);
+ const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Live screen viewing is available when the Windows connector is running/);
  assert.match(page,/updateUser\(\{email\}\)/);assert.match(page,/updateUser\(\{password\}\)/);assert.match(page,/openPhoneVideo/);assert.match(page,/phoneVideoPicker/);assert.match(page,/data-page-link=\"video\"/);assert.doesNotMatch(page,/\.nav a\[data-page-link=\\\"video\\\"\].*display:none!important/);
 });
 
-test('screen, mouse and keyboard controls stay out of the rendered computer page',()=>{
+test('live screen controls are visible in the rendered computer page',()=>{
  const page=html();
- assert.match(page,/#computerPage> :not\(#cloudComputerWorkspace\)\{display:none!important\}/);
- assert.match(page,/screen viewing, mouse control and keyboard control are not available/i);
+ assert.doesNotMatch(page,/#computerPage> :not\(#cloudComputerWorkspace\)\{display:none!important\}/);
+ assert.match(page,/id="liveScreen"/);assert.match(page,/id="screenFrame"/);assert.match(page,/api\/screen\/ticket/);assert.match(page,/api\/screen\/stream/);
  assert.doesNotMatch(page,/Agent Console|openAgentConsole/);
 });
 
 test('main PhoneBridge computer view keeps pairing and status without task tools or history',()=>{
  const page=html();const detail=page.slice(page.indexOf('id="cloudComputerWorkspace"'),page.indexOf('</section>',page.indexOf('id="cloudComputerWorkspace"')));
  assert.match(page,/id="phonePanel"/);assert.match(page,/id="deviceManager"/);assert.match(page,/id="legacyDeviceList"/);
- assert.match(detail,/View the paired computer connection status/);assert.doesNotMatch(detail,/systemInfo|listFiles|readFile|writeFile|createFolder|launchApp|commandList|Recent tasks|remote-keyboard-toggle|screenFrame/);
+ assert.match(detail,/View your paired computer connection and open its live desktop/);assert.doesNotMatch(detail,/systemInfo|listFiles|readFile|writeFile|createFolder|launchApp|commandList|Recent tasks|remote-keyboard-toggle|screenFrame/);
 });
 
 test('cloud customer API disables tasks while preserving authenticated device heartbeat',()=>{
@@ -268,7 +268,7 @@ function readZipEntries(zipPath){
 
 test('downloadable Windows Agent archive contains its launcher and every current worker dependency',()=>{
  const archive=readZipEntries(path.join(root,'public/downloads/PhoneBridge-Agent-Windows.zip'));
- for(const name of ['README.txt','Start-PhoneBridge.cmd','Start-PhoneBridge-Background.vbs','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js'])assert.ok(archive.has(name),'ZIP includes '+name);
+ for(const name of ['README.txt','Start-PhoneBridge.cmd','Start-PhoneBridge-Background.vbs','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js','screen-capture.js'])assert.ok(archive.has(name),'ZIP includes '+name);
  assert.equal(archive.has('workspace-tasks.js'),false,'ZIP does not include remote task support');
  for(const name of ['cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js'])assert.deepEqual(archive.get(name),fs.readFileSync(path.join(root,'agent',name)),name+' in the download matches the reviewed agent source');
  assert.match(archive.get('Start-PhoneBridge.cmd').toString('utf8'),/Start-PhoneBridge-Background\.vbs/);
@@ -357,4 +357,14 @@ test('browser upload recovery resumes from the server manifest after the same fi
 test('phone browser delivery resumes verified OPFS chunks and avoids large in-memory fallback',()=>{
  const page=html();
  for(const value of ['typeof handle.createWritable===\'function\'','createWritable({keepExistingData:true})','position:index*chunkSize','existing.slice(offset,offset+expected)','meta.sha256','fileSize>256*1024*1024','writable persistent file handle'])assert.ok(page.includes(value),'missing '+value);
+});
+
+
+test('live screen relay authenticates paired Windows frames and issues owner-scoped MJPEG streams',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ const routes=fs.readFileSync(path.join(root,'agent/screen-relay-routes.js'),'utf8');
+ const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
+ const capture=fs.readFileSync(path.join(root,'agent/screen-capture.js'),'utf8');
+ assert.match(server,/installScreenRelayRoutes/);assert.match(routes,/device_agents[\s\S]*?token_hash[\s\S]*?enabled/);assert.match(routes,/requireOwner\(req,res\)/);assert.match(routes,/multipart\/x-mixed-replace/);
+ assert.match(worker,/captureScreenJpeg\(\)/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);
 });
