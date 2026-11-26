@@ -148,6 +148,10 @@ async function ensureTransferInDrive(userId,transfer){
   return row;
 }
 const mediaPreviewSessions=new Map();
+// Short-lived, file-scoped download links let mobile browsers save large files
+// natively without fetching the entire video into a JavaScript Blob first.
+const downloadSessions=new Map();
+const DOWNLOAD_SESSION_TTL=10*60*1000;
 async function writeDriveFileToPath(file,userId,inputPath){
   if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
     const transferId=file.object_path.slice(TRANSFER_DRIVE_PREFIX.length);
@@ -312,21 +316,20 @@ app.get('/api/media-preview/:token',rateLimit(120,10*60*1000),async(req,res)=>{
     return res.status(422).json({ok:false,error:'PhoneBridge could not decode or convert this media. The original file remains unchanged in Drive.'});
   }
 });
-app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
+async function streamDriveDownload(userId,id,res){
   res.setHeader('Cache-Control','private, no-store');
-  const user=await requireOwner(req,res);if(!user)return;
+  res.setHeader('X-Content-Type-Options','nosniff');
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
-  const id=String(req.query.id||'');
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
   try{
-    const {data:file,error}=await supabaseAdmin.from('user_files').select('object_path,original_name,mime_type,size_bytes').eq('id',id).eq('user_id',user.id).maybeSingle();
+    const {data:file,error}=await supabaseAdmin.from('user_files').select('object_path,original_name,mime_type,size_bytes').eq('id',id).eq('user_id',userId).maybeSingle();
     if(error)throw error;
     if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
     const safeName=cleanFileName(file.original_name);
     const disposition="attachment; filename*=UTF-8''"+encodeURIComponent(safeName);
     if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
       const transferId=file.object_path.slice(TRANSFER_DRIVE_PREFIX.length);
-      const {data:transfer,error:transferError}=await supabaseAdmin.from('phone_transfers').select('id,status,size_bytes,chunk_count').eq('id',transferId).eq('user_id',user.id).maybeSingle();
+      const {data:transfer,error:transferError}=await supabaseAdmin.from('phone_transfers').select('id,status,size_bytes,chunk_count').eq('id',transferId).eq('user_id',userId).maybeSingle();
       if(transferError)throw transferError;
       if(!transfer||transfer.status!=='completed')return res.status(404).json({ok:false,error:'The received file is not available yet.'});
       const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,object_path,sha256,size_bytes').eq('transfer_id',transferId).order('chunk_index',{ascending:true});
@@ -334,25 +337,64 @@ app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
       if(!chunks?.length||chunks.length!==transfer.chunk_count||chunks.reduce((total,chunk)=>total+Number(chunk.size_bytes),0)!==Number(file.size_bytes))throw new Error('Drive file chunks are incomplete.');
       res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(file.size_bytes));res.setHeader('Content-Disposition',disposition);
       for(let index=0;index<chunks.length;index++){
+        if(res.destroyed)return;
         const chunk=chunks[index];if(chunk.chunk_index!==index)throw new Error('Drive file has a missing chunk.');
         const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
         if(downloadError||!data)throw downloadError||new Error('Drive chunk is missing.');
         const buffer=Buffer.from(await data.arrayBuffer());
-        if(buffer.length!==chunk.size_bytes||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Drive chunk failed integrity verification.');
-        if(!res.write(buffer))await new Promise(resolve=>res.once('drain',resolve));
+        if(buffer.length!==Number(chunk.size_bytes)||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Drive chunk failed integrity verification.');
+        if(!res.write(buffer))await new Promise(resolve=>{const done=()=>{res.off('drain',done);res.off('close',done);resolve()};res.once('drain',done);res.once('close',done)});
       }
-      return res.end();
+      if(!res.destroyed)return res.end();
+      return;
     }
     const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).download(file.object_path);
     if(downloadError||!data)throw downloadError||new Error('File data is missing.');
+    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(file.size_bytes));res.setHeader('Content-Disposition',disposition);
+    if(data.stream&&typeof data.stream==='function'){
+      await pipeline(Readable.fromWeb(data.stream()),res);
+      return;
+    }
     const buffer=Buffer.from(await data.arrayBuffer());
-    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(buffer.length));res.setHeader('Content-Disposition',disposition);
-    return res.status(200).send(buffer);
+    return res.status(200).end(buffer);
   }catch(error){
+    if(res.destroyed)return;
     console.error('[PhoneBridge Drive download]',error?.message||error);
     if(res.headersSent)return res.destroy(error);
     return res.status(503).json({ok:false,error:'Could not download this file. Please try again.'});
   }
+}
+app.post('/api/download-session',rateLimit(60,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'File storage is not configured.'});
+  const id=String(req.body?.id||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
+  try{
+    const {data:file,error}=await supabaseAdmin.from('user_files').select('id').eq('id',id).eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    const now=Date.now();
+    for(const [token,session] of downloadSessions)if(session.expiresAt<=now)downloadSessions.delete(token);
+    while(downloadSessions.size>=1000)downloadSessions.delete(downloadSessions.keys().next().value);
+    const token=crypto.randomBytes(32).toString('hex');
+    downloadSessions.set(token,{userId:user.id,fileId:id,expiresAt:now+DOWNLOAD_SESSION_TTL});
+    return res.json({ok:true,url:'/api/file-download/'+token,expiresIn:Math.floor(DOWNLOAD_SESSION_TTL/1000)});
+  }catch(error){
+    console.error('[PhoneBridge download session]',error?.message||error);
+    return res.status(503).json({ok:false,error:'Could not prepare this download.'});
+  }
+});
+app.get('/api/file-download/:token',rateLimit(120,10*60*1000),async(req,res)=>{
+  const token=String(req.params.token||'');
+  if(!/^[a-f0-9]{64}$/.test(token))return res.status(404).end();
+  const session=downloadSessions.get(token);
+  if(!session||session.expiresAt<=Date.now()){downloadSessions.delete(token);return res.status(410).json({ok:false,error:'This download link expired. Request the download again.'})}
+  return streamDriveDownload(session.userId,session.fileId,res);
+});
+app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
+  const user=await requireOwner(req,res);if(!user)return;
+  return streamDriveDownload(user.id,String(req.query.id||''),res);
 });
 app.patch('/api/files',rateLimit(60,60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');

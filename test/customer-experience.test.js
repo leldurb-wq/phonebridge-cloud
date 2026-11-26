@@ -314,6 +314,24 @@ test('Drive media previews use short-lived authenticated streaming sessions and 
 });
 
 
+test('mobile video previews open directly and downloads use expiring native download links',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
+ assert.ok(server.includes("app.post('/api/download-session'"));
+ assert.ok(server.includes("app.get('/api/file-download/:token'"));
+ assert.ok(server.includes('downloadSessions.set(token,{userId:user.id,fileId:id,expiresAt:now+DOWNLOAD_SESSION_TTL})'));
+ assert.ok(server.includes("res.setHeader('Content-Disposition',disposition)"));
+ assert.ok(server.includes('await pipeline(Readable.fromWeb(data.stream()),res)'));
+ assert.ok(page.includes("fetch('/api/download-session'"));
+ assert.ok(page.includes("const prefix='/api/file-download/'"));
+ assert.ok(page.includes('a.href=data.url'));
+ assert.ok(page.includes('if(phoneClient)await playInside();else showMediaChoice(f,playInside)'));
+ assert.ok(page.includes('if(phoneClient)await startPlayback();else showMediaChoice(f,startPlayback)'));
+ assert.ok(page.includes("$('previewDownload').dataset.fileId=item.id"));
+ assert.ok(page.includes('authenticatedDrivePreviewUrl(item.id,item.name)'));
+ assert.ok(!page.includes('const blob=await fetchTransferBlob(item,item.direction'));
+ assert.ok(!page.includes('const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement(\'a\')'));
+});
+
 test('browser upload recovery resumes from the server manifest after the same file is selected again',()=>{
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
  assert.ok(server.includes("req.query.manifest==='1'"));assert.ok(server.includes('uploadedChunks=chunks.map(x=>x.index)'));assert.ok(server.includes('target_client_id,direction,file_name'));
