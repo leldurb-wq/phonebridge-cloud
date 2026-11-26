@@ -557,14 +557,14 @@ html[data-theme="light"] .connection-banner[data-state="session-expired"] p{colo
 #library .file-actions button:hover{background:#143454}
 .preview-overlay{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:18px;background:#020711dc;backdrop-filter:blur(14px)}
 .preview-overlay.hidden{display:none!important}
-.preview-dialog{width:min(100%,980px);max-height:min(92dvh,900px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #3b82b866;border-radius:20px;background:#091629;box-shadow:0 28px 100px #000b}
+.preview-dialog{width:min(96vw,1440px);height:min(94dvh,1100px);max-height:96dvh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #3b82b866;border-radius:20px;background:#091629;box-shadow:0 28px 100px #000b}
 .preview-head,.preview-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#0d1e34;border-bottom:1px solid #38baff24}
 .preview-head>div{min-width:0}
 .preview-head b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e9f4ff;font-size:13px}
 .preview-head small,.preview-foot span{display:block;color:#91a8c5;font-size:10px}
-.preview-stage{min-height:180px;max-height:calc(92dvh - 145px);display:grid;place-items:center;overflow:auto;padding:18px;background:radial-gradient(ellipse at center,#102743,#050b16 78%)}
+.preview-stage{flex:1 1 auto;min-height:62dvh;max-height:none;display:grid;place-items:center;overflow:auto;padding:18px;background:radial-gradient(ellipse at center,#102743,#050b16 78%)}
 .preview-image{display:block;max-width:100%;max-height:calc(92dvh - 190px);object-fit:contain;border-radius:10px}
-.preview-video{display:block;width:100%;max-height:calc(92dvh - 190px);background:#000;border-radius:12px}
+.preview-video{display:block;width:100%;height:min(76dvh,900px);max-height:none;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:12px}
 .preview-audio{display:block;width:min(100%,680px);margin:42px auto;accent-color:#38baff}
 .preview-document{width:100%;height:min(70dvh,720px);border:0;border-radius:10px;background:#fff}
 .preview-foot{border-top:1px solid #38baff24;border-bottom:0}
@@ -576,9 +576,10 @@ body.preview-open{overflow:hidden}
  #library .file-actions{padding-left:0}
  #library .file-actions button{flex:1 1 auto;min-height:38px}
  .preview-overlay{padding:8px}
- .preview-dialog{max-height:94dvh;border-radius:15px}
- .preview-stage{max-height:calc(94dvh - 130px);padding:10px}
- .preview-image,.preview-video{max-height:calc(94dvh - 180px)}
+ .preview-dialog{width:100%;height:96dvh;max-height:96dvh;border-radius:15px}
+ .preview-stage{min-height:54dvh;max-height:none;padding:10px}
+ .preview-image{max-height:72dvh}
+ .preview-video{height:70dvh;max-height:none}
  .preview-foot{align-items:flex-start;flex-wrap:wrap}
 }
 \n
@@ -619,7 +620,7 @@ body[data-page="audio"] #audioPlayerPage,body[data-page="video"] #videoPlayerPag
 .media-track-size{color:var(--muted);font-size:9px;white-space:nowrap}
 .media-track-play{color:var(--accent);font-size:9px;letter-spacing:1px}
 .video-player-card{overflow:hidden;border:1px solid var(--line);border-radius:22px;background:linear-gradient(145deg,#101f35,#07111f);box-shadow:0 18px 45px #0002;color:#edf5ff}
-.video-player-card video{display:block;width:100%;max-height:min(62vh,620px);aspect-ratio:16/9;background:#03070d;object-fit:contain}
+.video-player-card video{display:block;width:100%;height:min(78vh,900px);max-height:none;aspect-ratio:16/9;background:#03070d;object-fit:contain}
 .video-now{padding:16px 20px 18px}
 .media-video-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .media-video-grid .media-track{min-height:74px}
@@ -639,7 +640,7 @@ body[data-page="audio"] #audioPlayerPage,body[data-page="video"] #videoPlayerPag
  .media-track-size{display:none}
  .media-track-play{font-size:8px}
  .media-video-grid{grid-template-columns:1fr}
- .video-player-card video{max-height:45vh}
+ .video-player-card video{height:58vh;max-height:none}
  .media-filter-row{flex-wrap:wrap}
  .media-sort{min-width:120px}
 }
@@ -1936,7 +1937,7 @@ function previewTable(stage,rows,title){
 async function renderFilePreview(name,url,stage){
  const ext=(name.split('.').pop()||'').toLowerCase(),kind=fileKind(name);stage.replaceChildren();
  if(kind==='images'&&!['heic','heif'].includes(ext)){const img=document.createElement('img');img.className='preview-image';img.alt=name;img.src=url;img.onerror=()=>{stage.replaceChildren();previewTextBlock(stage,'This image format could not be decoded by this browser. Download the original file to open it.')} ;stage.appendChild(img);return}
- if(kind==='videos'||kind==='audio'){const media=document.createElement(kind==='videos'?'video':'audio');media.className=kind==='videos'?'preview-video':'preview-audio';media.controls=true;media.playsInline=true;media.preload='metadata';media.src=url;media.onerror=()=>{const note=document.createElement('p');note.className='empty';note.textContent='PhoneBridge could not prepare a browser-ready version of this media. Your original file is still safe in Drive.';stage.appendChild(note)};stage.appendChild(media);return}
+ if(kind==='videos'||kind==='audio'){const media=document.createElement(kind==='videos'?'video':'audio');media.className=kind==='videos'?'preview-video':'preview-audio';media.controls=true;media.playsInline=true;media.preload='metadata';media.src=url;media.onerror=()=>{for(const [id,cached] of drivePreviewUrls){if(cached===url)drivePreviewUrls.delete(id)}const code=media.error?.code||0,reason=({1:'Playback was interrupted.',2:'The media stream could not be loaded. Check your connection.',3:'The browser could not decode the converted media.',4:'The browser rejected this media format.'})[code]||'The media player reported an unknown playback error.';const note=document.createElement('p');note.className='empty';note.style.cssText='max-width:680px;padding:16px;text-align:center';note.textContent=reason+' Your original file is still safe in Drive. Reopen Preview to retry or choose your device player.';stage.appendChild(note);$('previewStatus').textContent='Playback error '+code+' | Original file unchanged'};stage.appendChild(media);return}
  if(ext==='pdf'){const frame=document.createElement('iframe');frame.className='preview-document';frame.title=name;frame.src=url;stage.appendChild(frame);return}
  const response=await fetch(url,{headers:headers(),credentials:'same-origin',cache:'no-store'});if(!response.ok)throw Error('Could not load the file for preview ('+response.status+').');
  if(['txt','csv','json','xml','md','log','rtf','html','htm','js','css','py','sql','yaml','yml','ini','cfg','ts','tsx','jsx','java','c','cpp','h','sh'].includes(ext)){
@@ -1964,12 +1965,24 @@ async function renderFilePreview(name,url,stage){
 function showPreview(){ $('previewOverlay').classList.remove('hidden');document.body.classList.add('preview-open')}
 function showMediaChoice(file,onPreview){
  const stage=$('previewStage');stage.replaceChildren();
- const wrap=document.createElement('div');wrap.className='empty';wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:14px;padding:28px 18px;text-align:center';
- const heading=document.createElement('h2');heading.textContent='Choose how to play';heading.style.cssText='margin:0;font-size:22px';
- const sub=document.createElement('p');sub.textContent='Where would you like to play this media?';sub.style.cssText='margin:0;color:var(--muted,#999)';
- const inside=document.createElement('button');inside.type='button';inside.className='btn primary';inside.style.cssText='width:min(100%,360px);padding:16px';inside.textContent='▶  Play inside PhoneBridge';inside.onclick=onPreview;
- const device=document.createElement('button');device.type='button';device.className='btn secondary';device.style.cssText='width:min(100%,360px);padding:16px';device.textContent='▣  Play with my device’s player';device.onclick=async()=>{device.disabled=true;device.textContent='Preparing original file…';try{const response=await fetch('/api/download?id='+encodeURIComponent(file.id),{headers:headers(),credentials:'same-origin',cache:'no-store'});if(!response.ok)throw Error('Could not download the original file.');const blob=await response.blob(),shareFile=new File([blob],file.name,{type:blob.type||fileMimeType(file.name)});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[shareFile]})){await navigator.share({files:[shareFile],title:file.name});toast('Choose your media player from the share options')}else{await downloadOne(file.id);toast('Original downloaded. Open it with your preferred media player.')} }catch(error){if(error.name!=='AbortError')toast(error.message)}finally{device.disabled=false;device.textContent='▣  Play with my device’s player'}};
- wrap.append(heading,sub,inside,device);stage.appendChild(wrap);$('previewStatus').textContent='Your original file stays unchanged in Drive.';
+ const wrap=document.createElement('div');wrap.className='empty';wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:14px;width:min(100%,620px);padding:34px 20px;text-align:center';
+ const heading=document.createElement('h2');heading.textContent='Choose how to play';heading.style.cssText='margin:0;font-size:clamp(22px,3vw,30px)';
+ const sub=document.createElement('p');sub.textContent='Choose where you want to play this media.';sub.style.cssText='margin:0;color:var(--muted,#999)';
+ const inside=document.createElement('button');inside.type='button';inside.className='btn primary';inside.style.cssText='width:min(100%,440px);min-height:58px;padding:16px;font-size:15px';inside.textContent='▶  Play inside PhoneBridge';inside.onclick=onPreview;
+ const device=document.createElement('button');device.type='button';device.className='btn secondary';device.style.cssText='width:min(100%,440px);min-height:58px;padding:16px;font-size:15px';device.textContent='▣  Play with my device’s player';
+ const options=document.createElement('div');options.style.cssText='display:none;flex-direction:column;gap:10px;width:min(100%,440px);margin-top:4px';
+ const note=document.createElement('p');note.style.cssText='margin:2px 0 0;font-size:12px;line-height:1.6;color:var(--muted,#999)';
+ const makePlayer=(label,appName)=>{const button=document.createElement('button');button.type='button';button.className='btn secondary';button.style.cssText='width:100%;min-height:48px;padding:12px';button.textContent=label;button.onclick=async()=>{button.disabled=true;button.textContent='Preparing original…';try{await downloadOne(file.id);note.textContent='Original downloaded. Open your Downloads folder, right-click the file, choose Open with, then select '+appName+'.';$('previewStatus').textContent='Original downloaded for '+appName+'.';toast('Original downloaded for '+appName)}catch(error){note.textContent=error.message;toast(error.message)}finally{button.disabled=false;button.textContent=label}};return button};
+ const windows=/Windows/i.test(navigator.userAgent||'')||/Win/i.test(navigator.platform||'');
+ device.onclick=async()=>{
+  if(windows){options.style.display='flex';note.textContent='Choose your Windows player. PhoneBridge will download the unchanged original; your browser cannot launch desktop apps directly.';return}
+  device.disabled=true;device.textContent='Preparing original…';
+  try{const response=await fetch('/api/download?id='+encodeURIComponent(file.id),{headers:headers(),credentials:'same-origin',cache:'no-store'});if(!response.ok)throw Error('Could not download the original file ('+response.status+').');const blob=await response.blob(),shareFile=new File([blob],file.name,{type:blob.type||fileMimeType(file.name)});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[shareFile]})){await navigator.share({files:[shareFile],title:file.name});note.textContent='Choose VLC or another compatible player in your device share menu.'}else{await downloadOne(file.id);note.textContent='Original downloaded. Open it with a media player on your device.';toast('Original downloaded')}}
+  catch(error){if(error.name!=='AbortError'){note.textContent=error.message;toast(error.message)}}
+  finally{device.disabled=false;device.textContent='▣  Play with my device’s player'}
+ };
+ if(windows){options.append(makePlayer('▶  VLC Media Player','VLC Media Player'),makePlayer('▶  Windows Media Player','Windows Media Player'))}
+ wrap.append(heading,sub,inside,device,options,note);stage.appendChild(wrap);$('previewStatus').textContent='Your original file stays unchanged in Drive.';
 }
 async function openFilePreview(id){
  const f=driveFiles.find(x=>x.id===id);if(!f){toast('This file is no longer in Drive. Refresh and try again.');return}
@@ -2019,7 +2032,7 @@ document.querySelectorAll('[data-audio-filter]').forEach(b=>b.addEventListener('
 document.querySelectorAll('[data-video-filter]').forEach(b=>b.addEventListener('click',()=>{videoFilter=b.dataset.videoFilter;document.querySelectorAll('[data-video-filter]').forEach(x=>x.classList.toggle('active',x===b));renderMediaList('video')}));
 $('audioPrev').onclick=()=>stepMedia('audio',-1);$('audioNext').onclick=()=>stepMedia('audio',1);$('audioDownload').onclick=async()=>{if(audioIndex<0)return toast('Choose an audio file first');try{await downloadOne(audioQueue[audioIndex].id);toast('Audio download started')}catch(error){toast(error.message)}};$('videoDownload').onclick=async()=>{if(videoIndex<0)return toast('Choose a video first');try{await downloadOne(videoQueue[videoIndex].id);toast('Video download started')}catch(error){toast(error.message)}};
 $('audioElement').addEventListener('ended',()=>stepMedia('audio',1));$('audioElement').addEventListener('play',()=>$('audioPlaybackStatus').textContent='Playing now');$('audioElement').addEventListener('pause',()=>{if(!$('audioElement').ended)$('audioPlaybackStatus').textContent='Paused'});
-$('videoElement').addEventListener('ended',()=>stepMedia('video',1));$('videoElement').addEventListener('error',()=>{if(videoIndex>=0)toast('PhoneBridge could not prepare this video for playback. Your original remains in Drive.')});$('audioElement').addEventListener('error',()=>{if(audioIndex>=0)$('audioPlaybackStatus').textContent='PhoneBridge could not prepare this audio for playback. Your original remains in Drive.'});
+$('videoElement').addEventListener('ended',()=>stepMedia('video',1));$('videoElement').addEventListener('error',()=>{if(videoIndex>=0){const failed=videoQueue[videoIndex];if(failed)drivePreviewUrls.delete(failed.id);const code=$('videoElement').error?.code||0;toast('Video playback error '+code+'. Reopen the video to retry; the original remains in Drive.')}});$('audioElement').addEventListener('error',()=>{if(audioIndex>=0)$('audioPlaybackStatus').textContent='PhoneBridge could not prepare this audio for playback. Your original remains in Drive.'});
 
 async function refresh(){try{const d=await api('/api/files');driveFiles=d.files||[];driveFolders=d.folders||[''];const used=d.storage?.used||0,limit=d.storage?.limit||1,pct=Math.min(100,used/limit*100);say('storageText',size(used)+' of '+size(limit)+' | '+pct.toFixed(1)+'%');$('storageBar').style.width=pct+'%';const sel=$('driveFolder'),old=sel.value;sel.innerHTML='<option value="*">All folders</option><option value="">Unfiled</option>'+driveFolders.filter(Boolean).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');sel.value=[...sel.options].some(o=>o.value===old)?old:'*';renderDrive();renderMediaLibraries()}catch(e){say('fileCount','Drive unavailable');$('files').innerHTML='<div class="empty"><b>Could not load Drive</b>'+esc(e.message)+'</div>'}}
 ['driveSearch','driveFolder','driveSort','driveFilter'].forEach(id=>$(id).addEventListener(id==='driveSearch'?'input':'change',renderDrive));

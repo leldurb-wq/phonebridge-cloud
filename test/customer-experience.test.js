@@ -308,6 +308,9 @@ test('Drive media previews use short-lived authenticated streaming sessions and 
  assert.ok(server.includes("app.post('/api/preview-session'"));assert.ok(server.includes("app.get('/api/media-preview/:token'"));
  assert.ok(server.includes("require('ffmpeg-static')"));assert.ok(server.includes("'libx264'"));assert.ok(server.includes("'libmp3lame'"));assert.ok(server.includes("'yuv420p'"));assert.ok(server.includes('res.sendFile(session.outputPath'));
  assert.equal(pkg.dependencies['ffmpeg-static']!==undefined,true);
+ assert.ok(page.includes("VLC Media Player"));assert.ok(page.includes("Windows Media Player"));
+ assert.ok(page.includes("width:min(96vw,1440px)"));assert.ok(page.includes("height:min(76dvh,900px)"));
+ assert.ok(page.includes("Playback error '+code+' | Original file unchanged"));
 });
 
 
