@@ -316,7 +316,7 @@ async function serveOriginalMedia(session,req,res){
     })});
     return;
   }
-  const {data,error}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,300);
+  const {data,error}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,1800);
   if(error||!data?.signedUrl)throw error||new Error('Could not create a secure media stream URL.');
   res.setHeader('Cache-Control','private, no-store');
   res.setHeader('Content-Type',contentType);
@@ -391,7 +391,7 @@ async function streamDriveDownload(userId,id,req,res){
     }
     // Let private Storage serve byte ranges directly. Download sessions are
     // owner-scoped and short-lived; the signed URL is never stored in the app.
-    const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,300,{download:safeName});
+    const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).createSignedUrl(file.object_path,Math.ceil(DOWNLOAD_SESSION_TTL/1000),{download:safeName});
     if(downloadError||!data?.signedUrl)throw downloadError||new Error('Could not create a secure download URL.');
     return res.redirect(302,data.signedUrl);
   }catch(error){

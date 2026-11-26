@@ -320,7 +320,7 @@ test('mobile video previews open directly and downloads use expiring native down
  assert.ok(server.includes("app.get('/api/file-download/:token'"));
  assert.ok(server.includes('downloadSessions.set(token,{userId:user.id,fileId:id,expiresAt:now+DOWNLOAD_SESSION_TTL})'));
  assert.ok(server.includes("res.setHeader('Content-Disposition',disposition)"));
- assert.ok(server.includes("createSignedUrl(file.object_path,300,{download:safeName})"));
+ assert.ok(server.includes("createSignedUrl(file.object_path,Math.ceil(DOWNLOAD_SESSION_TTL/1000),{download:safeName})"));
  assert.ok(server.includes('return res.redirect(302,data.signedUrl)'));
  assert.ok(page.includes("fetch('/api/download-session'"));
  assert.ok(page.includes("const prefix='/api/file-download/'"));
@@ -338,7 +338,7 @@ test('media streams serve originals first with a conversion fallback for browser
  assert.ok(server.includes("app.get('/api/media-stream/:token',rateLimit(1200,10*60*1000),handleMediaStream)"));
  assert.ok(server.includes('const convert=req.query.convert===\'1\'||!session.directPlay'));
  assert.ok(server.includes('await serveOriginalMedia(session,req,res)'));
- assert.ok(server.includes('createSignedUrl(file.object_path,300)'));
+ assert.ok(server.includes('createSignedUrl(file.object_path,1800)'));
  assert.ok(server.includes('transferChunkCache.get(chunk.sha256'));
  assert.ok(server.includes('mediaSrc:["\'self\'",\'blob:\',\'https://*.supabase.co\']'));
  assert.ok(page.includes('function mediaConversionFallback(url)'));
