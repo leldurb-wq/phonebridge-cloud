@@ -132,6 +132,15 @@ function cleanFileName(value){
   const name=String(value||'').normalize('NFKC').replaceAll(String.fromCharCode(92),'/').split('/').pop().replace(/[\u0000-\u001f\u007f]/g,'_').replace(/^\.+/,'').trim().slice(0,180);
   return name||'upload';
 }
+const TRANSFER_DRIVE_PREFIX='phonebridge-transfer:';
+function transferDrivePath(transferId){return TRANSFER_DRIVE_PREFIX+transferId;}
+async function ensureTransferInDrive(userId,transfer){
+  const objectPath=transferDrivePath(transfer.id),now=new Date().toISOString();
+  const row={id:transfer.id,user_id:userId,object_path:objectPath,original_name:cleanFileName(transfer.file_name),mime_type:String(transfer.mime_type||'application/octet-stream').slice(0,120),size_bytes:Number(transfer.size_bytes),folder:'',created_at:transfer.created_at||now,updated_at:now};
+  const {error}=await supabaseAdmin.from('user_files').upsert(row,{onConflict:'object_path'});
+  if(error)throw error;
+  return row;
+}
 async function readUpload(req){
   const chunks=[];let total=0;
   return await new Promise((resolve,reject)=>{
@@ -205,15 +214,37 @@ app.get('/api/download',rateLimit(60,60*1000),async(req,res)=>{
     const {data:file,error}=await supabaseAdmin.from('user_files').select('object_path,original_name,mime_type,size_bytes').eq('id',id).eq('user_id',user.id).maybeSingle();
     if(error)throw error;
     if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    const safeName=cleanFileName(file.original_name);
+    const disposition="attachment; filename*=UTF-8''"+encodeURIComponent(safeName);
+    if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
+      const transferId=file.object_path.slice(TRANSFER_DRIVE_PREFIX.length);
+      const {data:transfer,error:transferError}=await supabaseAdmin.from('phone_transfers').select('id,status,size_bytes,chunk_count').eq('id',transferId).eq('user_id',user.id).maybeSingle();
+      if(transferError)throw transferError;
+      if(!transfer||transfer.status!=='completed')return res.status(404).json({ok:false,error:'The received file is not available yet.'});
+      const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('chunk_index,object_path,sha256,size_bytes').eq('transfer_id',transferId).order('chunk_index',{ascending:true});
+      if(chunkError)throw chunkError;
+      if(!chunks?.length||chunks.length!==transfer.chunk_count||chunks.reduce((total,chunk)=>total+Number(chunk.size_bytes),0)!==Number(file.size_bytes))throw new Error('Drive file chunks are incomplete.');
+      res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(file.size_bytes));res.setHeader('Content-Disposition',disposition);
+      for(let index=0;index<chunks.length;index++){
+        const chunk=chunks[index];if(chunk.chunk_index!==index)throw new Error('Drive file has a missing chunk.');
+        const {data,error:downloadError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).download(chunk.object_path);
+        if(downloadError||!data)throw downloadError||new Error('Drive chunk is missing.');
+        const buffer=Buffer.from(await data.arrayBuffer());
+        if(buffer.length!==chunk.size_bytes||crypto.createHash('sha256').update(buffer).digest('hex')!==chunk.sha256)throw new Error('Drive chunk failed integrity verification.');
+        if(!res.write(buffer))await new Promise(resolve=>res.once('drain',resolve));
+      }
+      return res.end();
+    }
     const {data,error:downloadError}=await supabaseAdmin.storage.from(FILE_BUCKET).download(file.object_path);
     if(downloadError||!data)throw downloadError||new Error('File data is missing.');
     const buffer=Buffer.from(await data.arrayBuffer());
-    const safeName=cleanFileName(file.original_name);
-    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');
-    res.setHeader('Content-Length',String(buffer.length));
-    res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(safeName));
+    res.setHeader('Content-Type',file.mime_type||'application/octet-stream');res.setHeader('Content-Length',String(buffer.length));res.setHeader('Content-Disposition',disposition);
     return res.status(200).send(buffer);
-  }catch(_){return res.status(503).json({ok:false,error:'Could not download this file. Please try again.'});}
+  }catch(error){
+    console.error('[PhoneBridge Drive download]',error?.message||error);
+    if(res.headersSent)return res.destroy(error);
+    return res.status(503).json({ok:false,error:'Could not download this file. Please try again.'});
+  }
 });
 app.patch('/api/files',rateLimit(60,60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -246,8 +277,20 @@ app.delete('/api/files',rateLimit(20,10*60*1000),async(req,res)=>{
     const {data:file,error:findError}=await supabaseAdmin.from('user_files').select('object_path').eq('id',id).eq('user_id',user.id).maybeSingle();
     if(findError)throw findError;
     if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
-    const {error:removeError}=await supabaseAdmin.storage.from(FILE_BUCKET).remove([file.object_path]);
-    if(removeError)throw removeError;
+    if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
+      const transferId=file.object_path.slice(TRANSFER_DRIVE_PREFIX.length);
+      const {data:chunks,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',transferId);
+      if(chunkError)throw chunkError;
+      const paths=(chunks||[]).map(chunk=>chunk.object_path);
+      if(paths.length){const {error:removeError}=await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).remove(paths);if(removeError)throw removeError;}
+      const {error:chunkDeleteError}=await supabaseAdmin.from('phone_transfer_chunks').delete().eq('transfer_id',transferId);
+      if(chunkDeleteError)throw chunkDeleteError;
+      const {error:transferDeleteError}=await supabaseAdmin.from('phone_transfers').delete().eq('id',transferId).eq('user_id',user.id);
+      if(transferDeleteError)throw transferDeleteError;
+    }else{
+      const {error:removeError}=await supabaseAdmin.storage.from(FILE_BUCKET).remove([file.object_path]);
+      if(removeError)throw removeError;
+    }
     const {error:deleteError}=await supabaseAdmin.from('user_files').delete().eq('id',id).eq('user_id',user.id);
     if(deleteError)throw deleteError;
     return res.json({ok:true,deleted:true});
@@ -345,7 +388,7 @@ app.put('/api/transfers/:transferId/chunks/:index',rateLimit(400,10*60*1000),exp
     const {error:rowError}=await supabaseAdmin.from('phone_transfer_chunks').upsert({transfer_id:id,chunk_index:index,object_path:objectPath,size_bytes:bytes.length,sha256:digest},{onConflict:'transfer_id,chunk_index'});
     if(rowError)throw rowError;
     return res.json({ok:true,index,received:bytes.length});
-  }catch(_){return res.status(503).json({ok:false,error:'Could not store this transfer chunk. Retry the chunk.'});}
+  }catch(error){console.error('[PhoneBridge transfer chunk]',{transferId:id,index,message:error?.message,code:error?.statusCode||error?.code||null});return res.status(503).json({ok:false,error:'Could not store transfer chunk '+(index+1)+'. The cloud storage service is temporarily unavailable; retry the chunk.'});}
 });
 app.post('/api/transfers/:transferId/complete',rateLimit(30,10*60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -407,16 +450,17 @@ app.post('/api/transfers/:transferId/receive',rateLimit(120,60*1000),async(req,r
   const clientId=String(req.body?.clientId||''),status=String(req.body?.status||'');
   if(!TRANSFER_CLIENT_ID.test(clientId)||!['queued','receiving','completed','failed'].includes(status))return res.status(400).json({ok:false,error:'Invalid phone delivery update.'});
   try{
-    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,status').eq('id',req.params.transferId).eq('user_id',user.id).eq('target_client_id',clientId).eq('direction','pc_to_phone').maybeSingle();
+    const {data:transfer,error}=await supabaseAdmin.from('phone_transfers').select('id,status,file_name,mime_type,size_bytes,created_at').eq('id',req.params.transferId).eq('user_id',user.id).eq('target_client_id',clientId).eq('direction','pc_to_phone').maybeSingle();
     if(error)throw error;
     if(!transfer)return res.status(404).json({ok:false,error:'This file is not addressed to this phone.'});
-    if(transfer.status===status)return res.json({ok:true,status,idempotent:true});
+    if(transfer.status===status){if(status==='completed')await ensureTransferInDrive(user.id,transfer);return res.json({ok:true,status,idempotent:true})}
     const allowed=status==='receiving'?['queued','receiving']:['receiving'];
     if(!allowed.includes(transfer.status))return res.status(409).json({ok:false,error:'This delivery is no longer available.'});
     const now=new Date().toISOString();
     const {data,error:updateError}=await supabaseAdmin.from('phone_transfers').update({status,updated_at:now,error_message:status==='completed'?null:String(req.body?.error||(status==='failed'?'Phone could not save the file':'Phone delivery will retry')).slice(0,240),...(status==='completed'?{completed_at:now}:{})}).eq('id',transfer.id).eq('user_id',user.id).eq('target_client_id',clientId).eq('status',transfer.status).select('id').maybeSingle();
     if(updateError)throw updateError;
     if(!data)return res.status(409).json({ok:false,error:'Delivery state changed. Refresh the inbox.'});
+    if(status==='completed')await ensureTransferInDrive(user.id,transfer);
     if(status==='failed'){
       const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',transfer.id);
       const paths=(chunks||[]).map(c=>c.object_path);
@@ -437,7 +481,6 @@ app.get('/api/transfers/:transferId/chunks/:index',rateLimit(400,10*60*1000),asy
     if(!transfer)return res.status(404).json({ok:false,error:'File transfer not found.'});
     if(transfer.direction==='pc_to_phone'&&(!TRANSFER_CLIENT_ID.test(clientId)||transfer.target_client_id!==clientId))return res.status(403).json({ok:false,error:'This file belongs to another phone.'});
     if(!['queued','receiving','completed'].includes(transfer.status))return res.status(409).json({ok:false,error:'This file is no longer available.'});
-    if(transfer.status==='completed'&&transfer.completed_at&&Date.now()-Date.parse(transfer.completed_at)>24*60*60*1000)return res.status(410).json({ok:false,error:'The temporary transfer copy expired after 24 hours.'});
     const {data:chunk,error:chunkError}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path,sha256,size_bytes').eq('transfer_id',transfer.id).eq('chunk_index',index).maybeSingle();
     if(chunkError)throw chunkError;
     if(!chunk)return res.status(404).json({ok:false,error:'File chunk not found.'});
@@ -453,14 +496,7 @@ app.get('/api/transfers',rateLimit(60,60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user=await requireOwner(req,res);if(!user)return;
   try{
-    const expiry=new Date(Date.now()-24*60*60*1000).toISOString();
-    const {data:old}=await supabaseAdmin.from('phone_transfers').select('id').eq('user_id',user.id).eq('status','completed').lt('completed_at',expiry).limit(20);
-    for(const item of old||[]){
-      const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',item.id);
-      const paths=(chunks||[]).map(c=>c.object_path);
-      if(paths.length)await supabaseAdmin.storage.from(PC_TRANSFER_BUCKET).remove(paths);
-      await supabaseAdmin.from('phone_transfer_chunks').delete().eq('transfer_id',item.id);
-    }
+    // Completed transfer chunks back Drive entries and are removed only when the owner deletes the Drive file.
     const {data,error}=await supabaseAdmin.from('phone_transfers').select('id,direction,target_client_id,file_name,mime_type,size_bytes,status,error_message,created_at,updated_at,completed_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(50);
     if(error)throw error;
     return res.json({ok:true,transfers:(data||[]).map(x=>({id:x.id,direction:x.direction,targetClientId:x.target_client_id,name:x.file_name,type:x.mime_type,size:Number(x.size_bytes),status:x.status,error:x.error_message,createdAt:x.created_at,updatedAt:x.updated_at,completedAt:x.completed_at}))});
@@ -550,14 +586,15 @@ app.post('/api/agent/transfers/:transferId/complete',rateLimit(60,10*60*1000),as
   try{
     const now=new Date().toISOString();
     const changes={status,updated_at:now,error_message:status==='completed'?null:String(req.body?.error||(status==='failed'?'Transfer failed':'Transfer will retry')).slice(0,240),...(status==='completed'?{completed_at:now}: {})};
-    const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').eq('status','receiving').select('id').maybeSingle();
+    const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').eq('status','receiving').select('id,file_name,mime_type,size_bytes,created_at').maybeSingle();
     if(error)throw error;
     if(!data){
-      const {data:existing,error:existingError}=await supabaseAdmin.from('phone_transfers').select('status').eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').maybeSingle();
+      const {data:existing,error:existingError}=await supabaseAdmin.from('phone_transfers').select('id,status,file_name,mime_type,size_bytes,created_at').eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').maybeSingle();
       if(existingError)throw existingError;
-      if(existing?.status===status)return res.json({ok:true,status,idempotent:true});
+      if(existing?.status===status){if(status==='completed')await ensureTransferInDrive(agent.userId,existing);return res.json({ok:true,status,idempotent:true})}
       return res.status(404).json({ok:false,error:'Transfer not found or already finished.'});
     }
+    if(status==='completed')await ensureTransferInDrive(agent.userId,data);
     if(status==='failed'){
       const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',req.params.transferId);
       const paths=(chunks||[]).map(c=>c.object_path);
