@@ -86,7 +86,7 @@ test('PhoneBridge is permanently dark with no light-mode toggle or saved theme p
 
 test('authenticated users enter the original PhoneBridge workspace, not a separate dashboard or Agent Console',()=>{
  const page=html();const enter=page.slice(page.indexOf('async function enterAccountApp('),page.indexOf('async function initAccountAuth()'));
- assert.match(enter,/await init\(\)/);assert.doesNotMatch(enter,/dashboard\.js|activateCustomerDashboard/);
+ assert.match(enter,/await init\(\);hideLaunchScreen\(\)/);assert.doesNotMatch(enter,/showPage\('welcome'\)/,'account entry must preserve the session-review page selected by init');assert.doesNotMatch(enter,/dashboard\.js|activateCustomerDashboard/);
  assert.equal((page.match(/createClient\(/g)||[]).length,1,'the homepage creates one Supabase client');assert.equal((page.match(/onAuthStateChange\(/g)||[]).length,1,'the homepage registers one auth listener');
  assert.match(page,/<section class="phonebridge-workspace" id="phoneBridgeWorkspace">/);assert.doesNotMatch(page,/id="appHome"|customerDeviceWorkspace|Agent Console|openAgentConsole/);
  assert.match(page,/id="mainContent"/);assert.match(page,/id="accountGate"/);assert.match(page,/id="pairingCodeDisplay"/);
@@ -128,7 +128,7 @@ test('a saved paired device opens a session review with continue and revoke acti
  const page=html();
  assert.match(page,/id="sessionReviewPage"/);assert.match(page,/id="currentSessionList"/);
  assert.match(page,/function renderCurrentSessions\(devices\)/);
- assert.match(page,/data-session-continue/);assert.match(page,/data-session-revoke/);
+ assert.match(page,/data-session-continue/);assert.match(page,/data-session-revoke/);assert.match(page,/Device ID: '\+esc\(device\.id\)/,'each saved pairing displays its persistent device ID');
  assert.match(page,/showPage\('overview'\);toast\('Your PhoneBridge session is ready\.'/);
  assert.match(page,/api\('\/api\/devices\/'.*method:'DELETE'/);
  assert.match(page,/sessionReviewPage'\)\.classList\.toggle\('hidden',name!=='session'\)/);
