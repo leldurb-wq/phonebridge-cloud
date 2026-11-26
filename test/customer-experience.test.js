@@ -168,8 +168,8 @@ test('the retained customer routing helper still distinguishes anonymous, signed
 });
 
 test('main PhoneBridge pages mark cloud file transfer and private Drive as available while retaining unsupported feature notices',()=>{
- const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Sync automation, media streaming, screen viewing and remote input are not available/);
- assert.match(page,/updateUser\(\{email\}\)/);assert.match(page,/updateUser\(\{password\}\)/);
+ const page=html();assert.match(page,/File transfer and private cloud Drive are available/);assert.match(page,/Automatic folder sync, workspace notes, screen viewing and remote input are not included/);
+ assert.match(page,/updateUser\(\{email\}\)/);assert.match(page,/updateUser\(\{password\}\)/);assert.match(page,/openPhoneVideo/);assert.match(page,/phoneVideoPicker/);assert.match(page,/data-page-link=\"video\"/);assert.doesNotMatch(page,/\.nav a\[data-page-link=\\\"video\\\"\].*display:none!important/);
 });
 
 test('screen, mouse and keyboard controls stay out of the rendered computer page',()=>{
