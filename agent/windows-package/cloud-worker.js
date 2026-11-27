@@ -204,6 +204,7 @@ async function main() {
     rtcPollBusy=true;
     try{
       const pending=await postJson('/api/agent/screen/webrtc/poll',{deviceId:current.deviceId},current.agentToken);
+      if(activeRtcScreen&&Array.isArray(pending?.activeSessionIds)&&!pending.activeSessionIds.includes(activeRtcSessionId)){activeRtcScreen.close();activeRtcScreen=null;activeRtcSessionId=null;}
       if(pending?.offer&&pending?.sessionId){
         // The poll endpoint can return the same unanswered offer on every poll.
         // Never tear down a healthy peer just because that same offer was repeated.
