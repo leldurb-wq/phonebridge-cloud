@@ -190,7 +190,7 @@ async function main() {
       if(latestScreenFrame&&!screenRetryTimer)void publishScreenFrame(latestScreenFrame);
     }
   }  const screenCapturePublisher=startScreenCaptureStream({
-    frameRate:3,
+    frameRate:8,
     onFrame:frame=>{void publishScreenFrame(frame)},
     onError:error=>reportAgentEvent('screen-capture',error)
   });

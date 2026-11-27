@@ -1766,7 +1766,7 @@ async function init(){
   $('cloudStageNotice').hidden=false;$('setupOverall').textContent='Cloud connection';
   for(const id of ['setupService','setupStorage','setupDevices']){const node=$(id);if(node)node.textContent='Unavailable in cloud'}
   say('setupCheckMessage','Cloud account is online. A computer is only marked connected after the PhoneBridge background connector sends a recent authenticated heartbeat.');
-  await ensureTransferClient();const [initialDevices]=await Promise.all([loadDevices(),loadTransferPhones()]);if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(()=>{if(document.hidden)return;if(['overview','computer','session','pairing','transfer'].includes(document.body.dataset.page))loadDevices()},30000);if(!transferClientTimer)transferClientTimer=setInterval(()=>{if(!document.hidden)heartbeatTransferClient()},30000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden&&document.body.dataset.page==='transfer')loadTransferHistory()},30000);if(phoneClient)await pollPhoneInbox();
+  await ensureTransferClient();const [initialDevices]=await Promise.all([loadDevices(),loadTransferPhones()]);if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(()=>{if(document.hidden)return;if(['overview','computer','session','pairing','transfer'].includes(document.body.dataset.page))loadDevices()},30000);if(!transferClientTimer)transferClientTimer=setInterval(()=>{if(!document.hidden)heartbeatTransferClient()},30000);if(phoneClient&&!transferInboxTimer)transferInboxTimer=setInterval(pollPhoneInbox,5000);if(!transferHistoryTimer)transferHistoryTimer=setInterval(()=>{if(!document.hidden&&document.body.dataset.page==='transfer')loadTransferHistory()},30000);if(phoneClient)void pollPhoneInbox();
   renderCurrentSessions(initialDevices);const requested=location.hash.slice(1);showPage(initialDevices===null||initialDevices?.length?'session':pageNames.includes(requested)?requested:'welcome')
 }
 let pairingWatchTimer=null,pairingExpiryTimer=null,pairingExpiresAt=0,pairingCode='',pairingBaseline=new Map();
@@ -1846,7 +1846,7 @@ $('approvePair').onclick=async()=>{
 async function showWorkspace(host){
  if(!host)$('pairScreen').classList.add('hidden');$('workspace').classList.remove('hidden');if(!host)startHeartbeat();else{if(!deviceRefreshTimer)deviceRefreshTimer=setInterval(loadDevices,30000);if(!hostMonitorTimer)hostMonitorTimer=setInterval(async()=>{try{await api('/api/health');setBridgeStatus('Bridge online');setConnectionState('online')}catch(e){setBridgeStatus('Reconnecting');setConnectionState('reconnecting','Bridge connection interrupted','The ThinkPad app is open but the local service is not responding. Check the server, then try again.')}},20000)}
  $('disconnect').classList.toggle('hidden',host);$('securityNav').classList.toggle('hidden',!host);$('securityPage').classList.toggle('hidden',!host);$('setupNav').classList.toggle('hidden',!host);$('connectedAs').textContent=host?'ThinkPad is hosting the shared workspace. Approved phones can transfer files and notes.':'Your account is signed in. Send files to your paired ThinkPad or store them in your private cloud Drive.';
- await refresh();await loadNote();if(host){await loadDevices();await loadSecurity()}
+ await Promise.all([refresh(),loadNote(),host?loadDevices():Promise.resolve(),host?loadSecurity():Promise.resolve()]);
 }
 function showSessionExpired(){if(heartbeatTimer)clearTimeout(heartbeatTimer);heartbeatTimer=null;legacyToken='';$('workspace').classList.add('hidden');$('pairScreen').classList.remove('hidden');$('phonePanel').classList.remove('hidden');$('phoneCodeBox').classList.add('hidden');$('beginPair').disabled=false;setBridgeStatus('Session expired');setConnectionState('session-expired','Your session has expired','Sign in again to pair your devices.');say('phoneMsg','Your session expired. Sign in again to continue.');showPage('pairing')}
 function startHeartbeat(){if(isHost||heartbeatTimer)return;const ping=async()=>{if(heartbeatBusy||isHost)return;heartbeatBusy=true;try{const r=await fetch('/api/session/ping',{method:'POST',headers:headers(),credentials:'same-origin',cache:'no-store'});if(r.status===401){showSessionExpired();return}if(!r.ok)throw Error('Connection check failed');setBridgeStatus('Bridge online');setConnectionState('online');heartbeatDelay=20000}catch(e){setBridgeStatus(navigator.onLine?'Reconnecting':'Offline');setConnectionState(navigator.onLine?'reconnecting':'offline',navigator.onLine?'Trying to reconnect':'You are offline',navigator.onLine?'The private connection to your ThinkPad was interrupted. Phone Bridge will keep trying.':'The app is still available, but transfers and sync need the ThinkPad connection.');heartbeatDelay=Math.min(Math.round(heartbeatDelay*1.5),60000)}finally{heartbeatBusy=false}if(!isHost)heartbeatTimer=setTimeout(ping,heartbeatDelay)};ping()}
@@ -1870,8 +1870,36 @@ async function remoteInput(payload){try{await api('/api/input',{method:'POST',he
 let padShift=false;
 let padCaps=false,padCtrl=false,padAlt=false;function updatePadKeyLabels(){$('kbdShiftState').textContent=(padCaps?'Caps on':'Caps off')+(padShift?' · Shift':'');$('remoteKeyboard').querySelectorAll('[data-kbd]').forEach(k=>{const v=k.dataset.kbd;if(/^[a-z]$/.test(v))k.textContent=(padCaps!==padShift)?v.toUpperCase():v.toLowerCase()})}$('remoteKeyboard').onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const a=b.dataset.kbdAction;if(a==='shift'){padShift=!padShift;updatePadKeyLabels();return}if(a==='capslock'){padCaps=!padCaps;remoteInput({action:'key',key:'capslock'});updatePadKeyLabels();return}if(a==='ctrl'){padCtrl=!padCtrl;return}if(a==='alt'){padAlt=!padAlt;return}if(a){if(/^f([1-9]|1[0-2])$/.test(a)||['win','prtsc','insert','delete','home','end','pageup','pagedown','up','down','left','right','enter','tab','escape','backspace','ctrl+a','ctrl+c','ctrl+v','ctrl+s','alt+tab'].includes(a)){remoteInput({action:'key',key:a});return}return}let value=b.dataset.kbd;if(value===undefined)return;if(padCaps!==padShift&&/^[a-z]$/.test(value))value=value.toUpperCase();if(padShift){const shifted={'1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')','-':'_','=':'+','[':'{',']':'}',';':':',',':'<','.':'>','/':'?','\\':'|'};if(Object.prototype.hasOwnProperty.call(shifted,value))value=shifted[value]}if(padCtrl||padAlt){const shortcut=(padCtrl?'ctrl+':'alt+')+value.toLowerCase();padCtrl=false;padAlt=false;if(['ctrl+a','ctrl+c','ctrl+v','ctrl+s','alt+tab'].includes(shortcut))remoteInput({action:'key',key:shortcut});return}remoteInput({action:'type',text:value}).then(ok=>{if(ok&&padShift){padShift=false;updatePadKeyLabels()}})};
 function attachDirectScreenTouch(img){let start=null;img.addEventListener('pointerdown',e=>{if(e.button!==0&&e.pointerType!=='touch')return;start={x:e.clientX,y:e.clientY,button:e.button===2?'right':'left'};try{img.setPointerCapture(e.pointerId)}catch{}});img.addEventListener('pointerup',e=>{if(!start)return;const p=start;start=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)>18)return;const r=img.getBoundingClientRect();if(!r.width||!r.height)return;(()=>{let x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));const rot=window.phoneBridgeScreenRotation||0;if(rot===90)[x,y]=[y,1-x];else if(rot===180)[x,y]=[1-x,1-y];else if(rot===270)[x,y]=[1-y,x];remoteInput({action:'click',button:p.button,x,y})})()});img.addEventListener('pointercancel',()=>{start=null});img.addEventListener('contextmenu',e=>e.preventDefault())}
-let screenFrameUrl=null,screenPollTimer=null,screenRenewTimer=null,screenPollBusy=false,screenLastFrameAt=0,screenTicket=null,screenHasFrame=false;
-async function pollLiveScreenFrame(){
+let screenFrameUrl=null,screenPollTimer=null,screenRenewTimer=null,screenPollBusy=false,screenLastFrameAt=0,screenTicket=null,screenHasFrame=false,screenStreamController=null,screenStreamRetryTimer=null;
+async function receiveLiveScreenStream(ticket){
+ if(screenStreamController)screenStreamController.abort();
+ const controller=new AbortController();screenStreamController=controller;
+ try{
+  const response=await fetch('/api/screen/stream?ticket='+encodeURIComponent(ticket),{credentials:'same-origin',cache:'no-store',headers:{Accept:'multipart/x-mixed-replace'},signal:controller.signal});
+  if(!response.ok)throw Error('Screen stream returned '+response.status+'.');
+  if(!response.body?.getReader)throw Error('Continuous screen streaming is unavailable in this browser.');
+  const reader=response.body.getReader();let buffer=new Uint8Array(0);
+  while(screenRunning&&screenTicket===ticket){
+   const part=await reader.read();if(part.done)break;
+   const joined=new Uint8Array(buffer.length+part.value.length);joined.set(buffer);joined.set(part.value,buffer.length);buffer=joined;
+   while(true){
+    let start=-1;for(let i=0;i<buffer.length-1;i++){if(buffer[i]===255&&buffer[i+1]===216){start=i;break}}
+    if(start<0){buffer=buffer.slice(Math.max(0,buffer.length-1));break}
+    let end=-1;for(let i=start+2;i<buffer.length-1;i++){if(buffer[i]===255&&buffer[i+1]===217){end=i+1;break}}
+    if(end<0){if(start>0)buffer=buffer.slice(start);break}
+    const frame=buffer.slice(start,end+1);buffer=buffer.slice(end+1);
+    const img=$('screenFrame').querySelector('img');if(!img)continue;
+    const nextUrl=URL.createObjectURL(new Blob([frame],{type:'image/jpeg'}));const oldUrl=screenFrameUrl;screenFrameUrl=nextUrl;img.src=nextUrl;if(oldUrl)URL.revokeObjectURL(oldUrl);
+    screenLastFrameAt=Date.now();if(!screenHasFrame){screenHasFrame=true;say('screenStatus','Live ThinkPad stream connected. Frames are arriving continuously.')}
+   }
+   if(buffer.length>1600000)buffer=buffer.slice(-400000);
+  }
+  if(screenRunning&&screenTicket===ticket)throw Error('Screen stream ended.');
+ }catch(error){
+  if(error.name==='AbortError')return;
+  if(screenRunning&&screenTicket===ticket){say('screenStatus','Reconnecting live stream… '+error.message);if(screenStreamRetryTimer)clearTimeout(screenStreamRetryTimer);screenStreamRetryTimer=setTimeout(()=>{screenStreamRetryTimer=null;if(screenRunning&&screenTicket===ticket)void receiveLiveScreenStream(ticket)},900)}
+ }finally{if(screenStreamController===controller)screenStreamController=null}
+}async function pollLiveScreenFrame(){
  if(!screenRunning||!screenTicket||screenPollBusy)return;
  screenPollBusy=true;
  try{
@@ -1894,18 +1922,20 @@ function connectLiveScreen(){
  if(!img){frame.replaceChildren();img=document.createElement('img');img.alt='Live view of the ThinkPad desktop';attachDirectScreenTouch(img);frame.appendChild(img)}
  if(screenPollTimer)clearInterval(screenPollTimer);screenPollTimer=null;
  if(screenRenewTimer)clearTimeout(screenRenewTimer);screenRenewTimer=null;
+ if(screenStreamRetryTimer)clearTimeout(screenStreamRetryTimer);screenStreamRetryTimer=null;if(screenStreamController)screenStreamController.abort();screenStreamController=null;
  screenTicket=null;screenLastFrameAt=0;screenHasFrame=false;
  say('screenStatus','Opening a secure live connection to your ThinkPad…');
  api('/api/screen/ticket',{method:'POST'}).then(grant=>{
   if(!screenRunning)return;
   screenTicket=grant.ticket;say('screenStatus','Connected to the screen relay. Waiting for the next desktop frame…');
-  pollLiveScreenFrame();screenPollTimer=setInterval(pollLiveScreenFrame,350);
+  void receiveLiveScreenStream(grant.ticket);
   screenRenewTimer=setTimeout(()=>{if(screenRunning)connectLiveScreen()},90000);
  }).catch(error=>{if(screenRunning)say('screenStatus','Could not start live screen: '+error.message+'. Check that the Windows connector is online, then reconnect.')});
 }
 function disconnectLiveScreen(){
  if(screenPollTimer)clearInterval(screenPollTimer);screenPollTimer=null;
  if(screenRenewTimer)clearTimeout(screenRenewTimer);screenRenewTimer=null;
+ if(screenStreamRetryTimer)clearTimeout(screenStreamRetryTimer);screenStreamRetryTimer=null;if(screenStreamController)screenStreamController.abort();screenStreamController=null;
  screenTicket=null;screenLastFrameAt=0;screenHasFrame=false;
  const img=$('screenFrame').querySelector('img');if(img){img.removeAttribute('src')}
  if(screenFrameUrl){URL.revokeObjectURL(screenFrameUrl);screenFrameUrl=null}

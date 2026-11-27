@@ -8,7 +8,7 @@ function captureScreenJpeg() {
   if(!ffmpegPath)throw new Error('FFmpeg screen capture is not installed with this PhoneBridge connector.');
   const frame=execFileSync(ffmpegPath,[
     '-hide_banner','-loglevel','error','-f','gdigrab','-framerate','1','-i','desktop',
-    '-frames:v','1','-vf','scale=1024:576:force_original_aspect_ratio=decrease',
+    '-frames:v','1','-vf','scale=1024:576:force_original_aspect_ratio=decrease:flags=fast_bilinear',
     '-q:v','8','-f','image2pipe','-vcodec','mjpeg','pipe:1'
   ],{encoding:'buffer',windowsHide:true,stdio:['ignore','pipe','pipe'],timeout:6000,maxBuffer:5*1024*1024});
   if(!frame||frame.length<100||frame.length>780000||frame[0]!==255||frame[1]!==216)
@@ -20,11 +20,11 @@ function captureScreenJpeg() {
  * Keep one FFmpeg capture process alive instead of starting a new process for
  * every screenshot. This lowers startup latency and provides a steady MJPEG feed.
  */
-function startScreenCaptureStream({onFrame,onError,frameRate=3}={}) {
+function startScreenCaptureStream({onFrame,onError,frameRate=8}={}) {
   if(process.platform!=='win32')throw new Error('Live desktop capture currently requires the Windows connector.');
   if(!ffmpegPath)throw new Error('FFmpeg screen capture is not installed with this PhoneBridge connector.');
   let child=null,stopped=false,restartTimer=null,buffer=Buffer.alloc(0),stderr='';
-  const fps=Math.max(1,Math.min(5,Math.floor(Number(frameRate)||3)));
+  const fps=Math.max(1,Math.min(10,Math.floor(Number(frameRate)||8)));
   function report(error){try{onError?.(error)}catch{}}
   function start(){
     if(stopped)return;
@@ -32,7 +32,7 @@ function startScreenCaptureStream({onFrame,onError,frameRate=3}={}) {
     child=spawn(ffmpegPath,[
       '-hide_banner','-loglevel','error','-fflags','nobuffer','-flags','low_delay',
       '-thread_queue_size','64','-f','gdigrab','-framerate',String(fps),'-draw_mouse','1','-i','desktop',
-      '-vf','scale=1024:576:force_original_aspect_ratio=decrease',
+      '-vf','scale=1024:576:force_original_aspect_ratio=decrease:flags=fast_bilinear',
       '-q:v','8','-f','image2pipe','-vcodec','mjpeg','pipe:1'
     ],{windowsHide:true,stdio:['ignore','pipe','pipe']});
     child.stdout.on('data',chunk=>{
