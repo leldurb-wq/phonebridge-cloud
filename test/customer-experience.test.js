@@ -281,9 +281,9 @@ function readZipEntries(zipPath){
 
 test('downloadable Windows Agent archive contains its launcher and every current worker dependency',()=>{
  const archive=readZipEntries(path.join(root,'public/downloads/PhoneBridge-Agent-Windows.zip'));
- for(const name of ['README.txt','Start-PhoneBridge.cmd','Start-PhoneBridge-Background.vbs','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js','screen-capture.js'])assert.ok(archive.has(name),'ZIP includes '+name);
+ for(const name of ['README.txt','Start-PhoneBridge.cmd','Start-PhoneBridge-Background.vbs','cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js','screen-capture.js','webrtc-screen.js','audio-loopback.js','audio-loopback.ps1','Install-AudioRuntime.ps1'])assert.ok(archive.has(name),'ZIP includes '+name);
  assert.equal(archive.has('workspace-tasks.js'),false,'ZIP does not include remote task support');
- for(const name of ['cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js','screen-capture.js'])assert.deepEqual(archive.get(name),fs.readFileSync(path.join(root,'agent',name)),name+' in the download matches the reviewed agent source');
+ for(const name of ['cloud-worker.js','credential-store.js','enrollment.js','reconnect-loop.js','local-pairing-bridge.js','file-transfer.js','screen-capture.js','webrtc-screen.js','audio-loopback.js'])assert.deepEqual(archive.get(name),fs.readFileSync(path.join(root,'agent',name)),name+' in the download matches the reviewed agent source');
  assert.match(archive.get('Start-PhoneBridge.cmd').toString('utf8'),/Start-PhoneBridge-Background\.vbs/);
 });
 
