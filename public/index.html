@@ -1400,6 +1400,12 @@ body[data-page="computer"] #workspace>#deviceManager{display:block!important;wid
 @keyframes pbx-limited-card-enter{to{transform:translateY(0);opacity:.72}}
 @media(prefers-reduced-motion:reduce){body[data-page="overview"] #workspace>#dynamicWorkspace,.pbx-hero-copy,.pbx-visual,.pbx-feature.is-limited{animation:none!important;opacity:1;transform:none;filter:none}}
 </style>
+<style id="pbx-no-clutter-navigation">
+/* PhoneBridge uses its own in-page feature cards and back links; remove the legacy sidebar and mobile tab strip on every route. */
+nav.nav, nav.mobile-tabbar { display:none !important; }
+body .phonebridge-workspace { margin-left:0 !important; padding-left:0 !important; }
+body .shell { margin-left:auto !important; }
+</style>
 <style id="pbx-workspace-dark-surroundings">
 /* Full-bleed dark shell: no light page gutters, header, sidebar or legacy cards around the canvas. */
 html{background:#050914!important}
