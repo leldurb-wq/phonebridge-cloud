@@ -31,7 +31,7 @@ function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLim
       const candidates=(data||[]).map(d=>({deviceId:d.id,frame:frames.get(d.id)})).filter(item=>item.frame&&Date.now()-item.frame.at<5000).sort((a,b)=>b.frame.at-a.frame.at); if(!candidates.length)return res.status(409).json({ok:false,error:'No live frames from the paired ThinkPad. Start the PhoneBridge Windows connector in your signed-in desktop session.'}); const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:candidates[0].deviceId,expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
     }catch(_){return res.status(503).json({ok:false,error:'Could not open the private screen session.'});}
   });
-  app.get('/api/screen/frame',rateLimit(600,60000),(req,res)=>{
+  app.get('/api/screen/frame',rateLimit(900,60000),(req,res)=>{
     res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, private');
     const ticket=typeof req.query.ticket==='string'?req.query.ticket:'';const grant=tickets.get(ticket);
     if(!grant||grant.expiresAt<Date.now()){tickets.delete(ticket);return res.status(401).json({ok:false,error:'The private screen ticket expired. Reconnect to continue.'});}

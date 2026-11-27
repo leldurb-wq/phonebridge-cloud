@@ -1929,7 +1929,7 @@ function connectLiveScreen(){
  api('/api/screen/ticket',{method:'POST'}).then(grant=>{
   if(!screenRunning)return;
   screenTicket=grant.ticket;say('screenStatus','Connected to the screen relay. Waiting for the next desktop frame…');
-  screenPollTimer=setInterval(pollLiveScreenFrame,180);void pollLiveScreenFrame();
+  screenPollTimer=setInterval(pollLiveScreenFrame,100);void pollLiveScreenFrame();
   screenRenewTimer=setTimeout(()=>{if(screenRunning)connectLiveScreen()},90000);
  }).catch(error=>{if(screenRunning)say('screenStatus','Could not start live screen: '+error.message+'. Check that the Windows connector is online, then reconnect.')});
 }
