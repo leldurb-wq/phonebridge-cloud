@@ -1238,6 +1238,53 @@ body[data-page="pairing"] .pairing-footnote{width:min(100%,1180px);margin-left:a
 #screenFrame img{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#02060d}
 @media(max-width:700px){#screenFrame{height:54svh;min-height:220px}}
 </style>
+<style id="phonebridge-welcome-fit-v1">
+/* Fill the usable app viewport without pushing the pairing action below the fold. */
+html,body{min-height:100%}
+body[data-page="welcome"]{overflow-x:hidden}
+body[data-page="welcome"] #welcomePage{
+ display:block!important;width:100%;max-width:none;margin:0;padding:0;
+ min-height:calc(100svh - 132px);min-height:calc(100dvh - 132px);
+}
+body[data-page="welcome"] .cosmos-welcome{
+ width:100%;height:calc(100svh - 132px);height:calc(100dvh - 132px);
+ min-height:520px;max-height:none;box-sizing:border-box;overflow:hidden;
+ display:flex;flex-direction:column;
+ padding:clamp(12px,1.7vh,20px) clamp(18px,3vw,48px) clamp(12px,1.7vh,20px);
+}
+body[data-page="welcome"] .cosmos-intro{margin:clamp(6px,1.1vh,14px) auto 0}
+body[data-page="welcome"] .cosmos-intro h1{
+ font-size:clamp(38px,5vw,66px);line-height:.94;
+ margin:clamp(7px,1.2vh,14px) 0 9px;
+}
+body[data-page="welcome"] .cosmos-intro p{font-size:clamp(11px,.95vw,13px);line-height:1.55}
+body[data-page="welcome"] .pairing-universe{
+ width:min(100%,950px);height:auto;min-height:0;max-height:390px;
+ flex:1 1 260px;margin:0 auto;
+}
+body[data-page="welcome"] .cosmos-bottom{margin-top:auto;padding-top:10px;flex:none}
+body[data-page="welcome"] .cosmos-cta{height:52px;min-height:52px}
+@media(max-height:760px) and (min-width:761px){
+ body[data-page="welcome"] #welcomePage{min-height:calc(100dvh - 118px)}
+ body[data-page="welcome"] .cosmos-welcome{height:calc(100dvh - 118px);min-height:450px;padding-top:8px;padding-bottom:8px}
+ body[data-page="welcome"] .cosmos-intro{margin-top:3px}
+ body[data-page="welcome"] .cosmos-intro h1{font-size:clamp(34px,4vw,52px);margin:5px 0}
+ body[data-page="welcome"] .pairing-universe{max-height:270px;flex-basis:190px}
+}
+@media(max-width:760px){
+ body[data-page="welcome"] #welcomePage{min-height:calc(100svh - 142px);min-height:calc(100dvh - 142px)}
+ body[data-page="welcome"] .cosmos-welcome{
+  height:auto;min-height:calc(100svh - 142px);min-height:calc(100dvh - 142px);
+  max-height:none;overflow:hidden;padding:14px 15px calc(14px + env(safe-area-inset-bottom));
+ }
+ body[data-page="welcome"] .cosmos-intro{margin:14px auto 0}
+ body[data-page="welcome"] .cosmos-intro h1{font-size:clamp(39px,10vw,56px);margin:9px 0}
+ body[data-page="welcome"] .pairing-universe{height:clamp(190px,30svh,270px);min-height:190px;max-height:270px;flex:1 1 auto;width:100%;margin:0 auto}
+ body[data-page="welcome"] .cosmos-bottom{grid-template-columns:1fr;gap:10px;margin-top:auto;padding-top:12px}
+ body[data-page="welcome"] .cosmos-cta{width:100%;min-width:0;height:52px;min-height:52px}
+ body[data-page="welcome"] .cosmos-bottom-index{display:none}
+}
+</style>
 </head>
 <body data-page="overview"><section id="accountGate" aria-labelledby="accountGateTitle"><div class="account-auth-card"><div class="account-auth-brand"><div class="account-auth-mark">PB</div><div><b>Phone Bridge</b><small>YOUR PRIVATE ACCOUNT</small></div></div><h1 id="accountGateTitle">Welcome to Phone Bridge</h1><p id="authDescription">Sign in to open your Phone Bridge workspace.</p><form id="accountLoginForm"><label for="accountLoginEmail">Email address</label><input id="accountLoginEmail" type="email" autocomplete="username" required placeholder="you@example.com"><label for="accountLoginPassword">Password</label><input id="accountLoginPassword" type="password" autocomplete="current-password" required placeholder="Your password"><button id="accountLoginButton" type="submit">Sign in</button></form><form id="accountRegisterForm" hidden><label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" required placeholder="you@example.com"><label for="registerPassword">Password</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"><button id="registerButton" type="submit">Create account</button></form><form id="accountRecoveryForm" hidden><label for="recoveryEmail">Email address</label><input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"><button id="recoveryButton" type="submit">Send password recovery email</button></form><form id="passwordUpdateForm" hidden><label for="recoveryPassword">New password</label><input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" required><button type="submit">Update password</button></form><form id="phoneAuthForm" hidden><label for="accountPhone">Phone number</label><input id="accountPhone" type="tel" autocomplete="tel" placeholder="+1 555 010 1234" required><label for="phoneOtp" id="phoneOtpLabel" hidden>Verification code</label><input id="phoneOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="SMS code" hidden><button id="phoneAuthButton" type="submit">Send sign-in code</button></form><button class="account-auth-link" id="googleAuthButton" type="button">Continue with Google</button><div id="accountAuthMessage" class="account-auth-message" role="status" aria-live="polite">Checking account service?</div><div class="account-auth-links"><button class="account-auth-link" type="button" data-auth-view="login">Sign in</button><button class="account-auth-link" type="button" data-auth-view="register">Create account</button><button class="account-auth-link" type="button" data-auth-view="recovery">Forgot password?</button><button class="account-auth-link" type="button" data-auth-view="phone">Use phone</button></div></div></section><div class="launch-screen" id="launchScreen" aria-hidden="true"><div class="launch-symbol"><svg viewBox="0 0 100 100" fill="none" aria-hidden="true"><path d="M17 51C25 17 75 17 83 51" stroke="#78DDF2" stroke-width="6" stroke-linecap="round"/><path d="M17 51V78M83 51V78M10 80H90" stroke="#4B9DFA" stroke-width="5" stroke-linecap="round"/><circle cx="17" cy="51" r="6" fill="#D9F7FF"/><circle cx="50" cy="26" r="6" fill="#D9F7FF"/><circle cx="83" cy="51" r="6" fill="#D9F7FF"/></svg></div><strong>Phone Bridge</strong><span>Your devices. Your private workspace.</span><div class="launch-progress"></div></div><a class="skip-link" href="#mainContent">Skip to main content</a><main class="shell" id="mainContent">
 <header class="topbar">
