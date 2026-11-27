@@ -35,9 +35,19 @@ test('workspace feature pages share a back-to-workspace control',()=>{
  const page=html();
  assert.match(page,/<div class="workspace-backbar" aria-label="Workspace navigation">[\s\S]*?href="#overview" data-page-link="overview" aria-label="Back to PhoneBridge workspace"[\s\S]*?BACK TO WORKSPACE/);
  const backStyle=page.slice(page.indexOf('id="pbx-workspace-back-navigation"'),page.indexOf('</style>',page.indexOf('id="pbx-workspace-back-navigation"')));
- for(const route of ['transfer','library','computer','help'])assert.ok(backStyle.includes('body[data-page="'+route+'"] .workspace-backbar'),route+' page displays the back control');
+ for(const route of ['transfer','library','computer','help','pairing','session','audio','video','sync','notes','security','setup'])assert.ok(backStyle.includes('body[data-page="'+route+'"] .workspace-backbar'),route+' page displays the back control');
  assert.match(page,/document\.querySelectorAll\('\[data-page-link\]'\)\.forEach\(a=>a\.addEventListener\('click',e=>\{e\.preventDefault\(\);showPage\(a\.dataset\.pageLink\)\}\)\)/);
  assert.match(backStyle,/\.workspace-back-button\{[\s\S]*background:linear-gradient\(120deg,#102b43,#0a1a2d\)/);
+});
+
+test('main workspace always shows paired sessions and the desktop welcome view fits the viewport',()=>{
+ const page=html();
+ assert.match(page,/id="workspaceSessionList"/);assert.match(page,/id="workspaceRefreshSessions"/);assert.match(page,/id="workspaceSessionCount"/);
+ assert.match(page,/const lists=\[\$\('currentSessionList'\),\$\('workspaceSessionList'\)\]/);
+ assert.match(page,/renderPcDeviceChoices\(\);renderCurrentSessions\(items\)/);
+ assert.match(page,/workspaceSessionList'\)\.addEventListener\('click',handleSessionListClick\)/);
+ const fit=page.slice(page.indexOf('id="pbx-welcome-viewport-fit"'),page.indexOf('</style>',page.indexOf('id="pbx-welcome-viewport-fit"')));
+ assert.match(fit,/height:100svh/);assert.match(fit,/height:calc\(100svh - 68px\)/);assert.match(fit,/pairing-universe\{height:clamp/);
 });
 
 test('cinematic workspace uses a full-bleed dark outer shell without light page gutters',()=>{
@@ -175,7 +185,7 @@ test('main PhoneBridge pages mark cloud file transfer and private Drive as avail
 test('live screen controls are visible in the rendered computer page',()=>{
  const page=html();
  assert.doesNotMatch(page,/#computerPage> :not\(#cloudComputerWorkspace\)\{display:none!important\}/);
- assert.match(page,/id="liveScreen"/);assert.match(page,/id="screenFrame"/);assert.match(page,/api\/screen\/ticket/);assert.match(page,/api\/screen\/stream/);
+ assert.match(page,/id="liveScreen"/);assert.match(page,/id="screenFrame"/);assert.match(page,/api\/screen\/ticket/);assert.match(page,/api\/screen\/frame\?ticket=/);
  assert.doesNotMatch(page,/Agent Console|openAgentConsole/);
 });
 
@@ -360,11 +370,12 @@ test('phone browser delivery resumes verified OPFS chunks and avoids large in-me
 });
 
 
-test('live screen relay authenticates paired Windows frames and issues owner-scoped MJPEG streams',()=>{
+test('live screen relay authenticates paired Windows frames and serves owner-scoped JPEG polling for all browsers',()=>{
+ const page=html();
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
  const routes=fs.readFileSync(path.join(root,'agent/screen-relay-routes.js'),'utf8');
  const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
  const capture=fs.readFileSync(path.join(root,'agent/screen-capture.js'),'utf8');
- assert.match(server,/installScreenRelayRoutes/);assert.match(routes,/device_agents[\s\S]*?token_hash[\s\S]*?enabled/);assert.match(routes,/requireOwner\(req,res\)/);assert.match(routes,/multipart\/x-mixed-replace/);
- assert.match(worker,/captureScreenJpeg\(\)/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);
+ assert.match(server,/installScreenRelayRoutes/);assert.match(routes,/device_agents[\s\S]*?token_hash[\s\S]*?enabled/);assert.match(routes,/requireOwner\(req,res\)/);assert.match(routes,/api\/screen\/frame/);assert.match(routes,/X-PB-Frame-At/);assert.match(routes,/Content-Type','image\/jpeg/);
+ assert.match(worker,/captureScreenJpeg\(\)/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);assert.match(page,/api\/screen\/frame\?ticket=/);assert.match(page,/setInterval\(pollLiveScreenFrame,400\)/);
 });

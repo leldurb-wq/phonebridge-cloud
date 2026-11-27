@@ -28,6 +28,17 @@ function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLim
       const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:ids[0],expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
     }catch(_){return res.status(503).json({ok:false,error:'Could not open the private screen session.'});}
   });
+  app.get('/api/screen/frame',rateLimit(240,60000),(req,res)=>{
+    res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, private');
+    const ticket=typeof req.query.ticket==='string'?req.query.ticket:'';const grant=tickets.get(ticket);
+    if(!grant||grant.expiresAt<Date.now()){tickets.delete(ticket);return res.status(401).json({ok:false,error:'The private screen ticket expired. Reconnect to continue.'});}
+    const frame=frames.get(grant.deviceId);
+    if(!frame||Date.now()-frame.at>5000)return res.status(503).json({ok:false,error:'Waiting for a fresh ThinkPad screen frame.'});
+    const since=Number(req.query.since)||0;
+    if(frame.at<=since)return res.status(204).end();
+    res.status(200);res.setHeader('Content-Type','image/jpeg');res.setHeader('Content-Length',String(frame.frame.length));res.setHeader('X-PB-Frame-At',String(frame.at));res.setHeader('X-Content-Type-Options','nosniff');
+    return res.end(frame.frame);
+  });
   app.get('/api/screen/stream',rateLimit(30,60000),(req,res)=>{
     const ticket=typeof req.query.ticket==='string'?req.query.ticket:'';const grant=tickets.get(ticket);
     if(!grant||grant.expiresAt<Date.now()){tickets.delete(ticket);return res.status(401).end();}
