@@ -190,7 +190,7 @@ test('live screen controls are visible in the rendered computer page',()=>{
  assert.doesNotMatch(page,/Agent Console|openAgentConsole/);
 });
 
-test('screen controls work with WebRTC video and capture the displayed frame locally',()=>{const page=html();assert.match(page,/async function captureThinkPadScreen()[\s\S]*?video.videoWidth[\s\S]*?canvas.toBlob/);assert.doesNotMatch(page,/captureThinkPadScreen()[\s\S]{0,800}api\('/api/screen'/);assert.match(page,/function applyScreenRotation()[\s\S]*?querySelector('img,video')/);assert.match(page,/function connectLiveScreen()[\s\S]*?attachDirectScreenTouch(video)/);assert.match(page,/window.setScreenView=function(mode)/);assert.match(page,/screenRtcPeer/)});
+test('screen controls work with WebRTC video and capture the displayed frame locally',()=>{const page=html();const capture=page.slice(page.indexOf('async function captureThinkPadScreen()'),page.indexOf('function applyScreenRotation()'));assert.match(capture,/video\.videoWidth/);assert.match(capture,/canvas\.toBlob/);assert.doesNotMatch(capture,/api\(/);assert.match(page,/function applyScreenRotation\(\)[\s\S]*?querySelector\('img,video'\)/);assert.match(page,/function connectLiveScreen\(\)[\s\S]*?attachDirectScreenTouch\(video\)/);assert.match(page,/window\.setScreenView=function\(mode\)/);assert.match(page,/screenRtcPeer/)});
 
 test('main PhoneBridge computer view keeps pairing and status without task tools or history',()=>{
  const page=html();const detail=page.slice(page.indexOf('id="cloudComputerWorkspace"'),page.indexOf('</section>',page.indexOf('id="cloudComputerWorkspace"')));
