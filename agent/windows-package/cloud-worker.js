@@ -206,7 +206,7 @@ async function main() {
       const pending=await postJson('/api/agent/screen/webrtc/poll',{deviceId:current.deviceId},current.agentToken);
       if(pending?.offer&&pending?.sessionId){
         if(activeRtcScreen){activeRtcScreen.close();activeRtcScreen=null;}
-        const rtc=await answerScreenOffer({offer:pending.offer,ffmpegPath:require('ffmpeg-static'),frameRate:Number(process.env.PHONEBRIDGE_SCREEN_FPS)||30,width:1280,height:720,onError:error=>reportAgentEvent('webrtc-screen',error)});
+        const rtc=await answerScreenOffer({offer:pending.offer,ffmpegPath:require('ffmpeg-static'),frameRate:Number(process.env.PHONEBRIDGE_SCREEN_FPS)||20,width:1280,height:720,onError:error=>reportAgentEvent('webrtc-screen',error)});
         activeRtcScreen=rtc;
         await postJson('/api/agent/screen/webrtc/answer',{deviceId:current.deviceId,sessionId:pending.sessionId,answer:rtc.answer},current.agentToken);
       }
