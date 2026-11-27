@@ -19,6 +19,7 @@ const { generatePairingCode, hashEnrollmentCode, hashLegacyPairingCode } = requi
 const { isDeviceOnline } = require('./agent/device-status');
 const { getClientAddress } = require('./agent/client-address');
 const { installScreenRelayRoutes } = require('./agent/screen-relay-routes');
+const { installWebRtcSignalRoutes } = require('./agent/webrtc-signal-routes');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -987,6 +988,7 @@ async function recordAgentHeartbeat(req,res) {
   }
 }
 installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope});
+installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit});
 app.post('/api/agent/heartbeat', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
 // Compatibility route for already-installed Agents; it now only updates status.
 app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);

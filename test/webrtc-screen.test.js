@@ -1,0 +1,5 @@
+﻿'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {answerScreenOffer}=require('../agent/webrtc-screen');
+test('WebRTC screen sender rejects malformed offers before starting capture',async()=>{await assert.rejects(()=>answerScreenOffer({offer:null,ffmpegPath:'not-used'}),/Invalid WebRTC screen offer/);await assert.rejects(()=>answerScreenOffer({offer:{type:'answer',sdp:'x'},ffmpegPath:'not-used'}),/Invalid WebRTC screen offer/)});
+test('WebRTC signaling routes are installed with owner and agent endpoints',()=>{const fs=require('node:fs');const source=fs.readFileSync(require('node:path').join(__dirname,'../agent/webrtc-signal-routes.js'),'utf8');for(const route of ['/api/screen/webrtc/session','/api/screen/webrtc/offer','/api/screen/webrtc/answer','/api/agent/screen/webrtc/poll','/api/agent/screen/webrtc/answer'])assert.ok(source.includes(route),route);assert.match(source,/token_hash/);assert.match(source,/userId/)});

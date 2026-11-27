@@ -11,6 +11,7 @@ const { runReconnectLoop } = require('./reconnect-loop');
 const { createLocalPairingBridge } = require('./local-pairing-bridge');
 const { receiveTransfer } = require('./file-transfer');
 const { startScreenCaptureStream } = require('./screen-capture');
+const { answerScreenOffer } = require('./webrtc-screen');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -195,6 +196,25 @@ async function main() {
     onError:error=>reportAgentEvent('screen-capture',error)
   });
   process.once('exit',()=>screenCapturePublisher.stop());
+  let activeRtcScreen=null,rtcPollBusy=false,rtcPollTimer=null;
+  async function pollWebRtcScreen(){
+    if(rtcPollBusy)return;
+    const current=activeCredentials;
+    if(!current?.deviceId||!current?.agentToken){rtcPollTimer=setTimeout(pollWebRtcScreen,1500);return;}
+    rtcPollBusy=true;
+    try{
+      const pending=await postJson('/api/agent/screen/webrtc/poll',{deviceId:current.deviceId},current.agentToken);
+      if(pending?.offer&&pending?.sessionId){
+        if(activeRtcScreen){activeRtcScreen.close();activeRtcScreen=null;}
+        const rtc=await answerScreenOffer({offer:pending.offer,ffmpegPath:require('ffmpeg-static'),frameRate:Number(process.env.PHONEBRIDGE_SCREEN_FPS)||30,width:1280,height:720,onError:error=>reportAgentEvent('webrtc-screen',error)});
+        activeRtcScreen=rtc;
+        await postJson('/api/agent/screen/webrtc/answer',{deviceId:current.deviceId,sessionId:pending.sessionId,answer:rtc.answer},current.agentToken);
+      }
+    }catch(error){if(error.statusCode!==404&&error.statusCode!==401)reportAgentEvent('webrtc-screen-signaling',error);}
+    finally{rtcPollBusy=false;rtcPollTimer=setTimeout(pollWebRtcScreen,900);}
+  }
+  process.once('exit',()=>{if(rtcPollTimer)clearTimeout(rtcPollTimer);if(activeRtcScreen)activeRtcScreen.close();});
+  void pollWebRtcScreen();
   await runReconnectLoop({
     credentials,
     claim:async current=>{

@@ -2,6 +2,7 @@
 
 function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope}) {
   const frames=new Map();
+  global.__pbScreenFrames=frames;
   const tickets=new Map();
   const authCache=new Map();
   app.post('/api/agent/screen/frame',rateLimit(1200,60000),rateLimit(900,60000,agentRateScope),async(req,res)=>{
