@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -196,7 +196,7 @@ async function main() {
     onError:error=>reportAgentEvent('screen-capture',error)
   });
   process.once('exit',()=>screenCapturePublisher.stop());
-  let activeRtcScreen=null,rtcPollBusy=false,rtcPollTimer=null;
+  let activeRtcScreen=null,activeRtcSessionId=null,rtcPollBusy=false,rtcPollTimer=null;
   async function pollWebRtcScreen(){
     if(rtcPollBusy)return;
     const current=activeCredentials;
@@ -205,9 +205,16 @@ async function main() {
     try{
       const pending=await postJson('/api/agent/screen/webrtc/poll',{deviceId:current.deviceId},current.agentToken);
       if(pending?.offer&&pending?.sessionId){
-        if(activeRtcScreen){activeRtcScreen.close();activeRtcScreen=null;}
+        // The poll endpoint can return the same unanswered offer on every poll.
+        // Never tear down a healthy peer just because that same offer was repeated.
+        if(activeRtcScreen&&activeRtcSessionId===pending.sessionId){
+          const state=activeRtcScreen.pc?.connectionState;
+          if(!['failed','closed'].includes(state))return;
+          activeRtcScreen.close();activeRtcScreen=null;activeRtcSessionId=null;
+        }
+        if(activeRtcScreen){activeRtcScreen.close();activeRtcScreen=null;activeRtcSessionId=null;}
         const rtc=await answerScreenOffer({offer:pending.offer,ffmpegPath:require('ffmpeg-static'),frameRate:Number(process.env.PHONEBRIDGE_SCREEN_FPS)||20,width:pending.width||1280,height:pending.height||720,onError:error=>reportAgentEvent('webrtc-screen',error)});
-        activeRtcScreen=rtc;
+        activeRtcScreen=rtc;activeRtcSessionId=pending.sessionId;
         await postJson('/api/agent/screen/webrtc/answer',{deviceId:current.deviceId,sessionId:pending.sessionId,answer:rtc.answer},current.agentToken);
       }
     }catch(error){if(error.statusCode!==404&&error.statusCode!==401)reportAgentEvent('webrtc-screen-signaling',error);}
