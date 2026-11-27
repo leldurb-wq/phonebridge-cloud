@@ -14,9 +14,11 @@ async function answerScreenOffer({offer,ffmpegPath,frameRate=20,width=1280,heigh
  const audioTrack=audioSource.createTrack();
  const stream=new MediaStream([videoTrack,audioTrack]);
  pc.addTrack(videoTrack,stream);pc.addTrack(audioTrack,stream);
- let videoChild=null,audioCapture=null,buffer=Buffer.alloc(0),closed=false,lastFrameAt=Date.now();
+ let videoChild=null,audioCapture=null,audioRetryTimer=null,audioRetryDelay=1000,buffer=Buffer.alloc(0),closed=false,lastFrameAt=Date.now();
  const frameBytes=width*height*3/2;let watchdog=null;
- const close=()=>{if(closed)return;closed=true;if(watchdog)clearInterval(watchdog);watchdog=null;if(videoChild){try{videoChild.kill()}catch{}videoChild=null}if(audioCapture){try{audioCapture.stop()}catch{}audioCapture=null}try{videoTrack.stop()}catch{}try{audioTrack.stop()}catch{}try{pc.close()}catch{}buffer=Buffer.alloc(0)};
+ const close=()=>{if(closed)return;closed=true;if(watchdog)clearInterval(watchdog);watchdog=null;if(audioRetryTimer)clearTimeout(audioRetryTimer);audioRetryTimer=null;if(videoChild){try{videoChild.kill()}catch{}videoChild=null}if(audioCapture){try{audioCapture.stop()}catch{}audioCapture=null}try{videoTrack.stop()}catch{}try{audioTrack.stop()}catch{}try{pc.close()}catch{}buffer=Buffer.alloc(0)};
+ function scheduleAudioRestart(error){if(closed)return;onError(error);if(audioRetryTimer)return;if(audioCapture){try{audioCapture.stop()}catch{}audioCapture=null}const delay=audioRetryDelay;audioRetryDelay=Math.min(audioRetryDelay*2,15000);audioRetryTimer=setTimeout(()=>{audioRetryTimer=null;startAudioCapture()},delay);audioRetryTimer.unref?.()}
+ function startAudioCapture(){if(closed)return;try{audioCapture=startSystemAudioLoopback({naudioDll,scriptPath:audioScriptPath,source:audioSource,onError:error=>scheduleAudioRestart(new Error('System audio: '+error.message))})}catch(error){scheduleAudioRestart(new Error('System audio unavailable: '+error.message))}}
  pc.addEventListener('connectionstatechange',()=>{if(['failed','closed'].includes(pc.connectionState))close()});
  try{
   await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -27,9 +29,8 @@ async function answerScreenOffer({offer,ffmpegPath,frameRate=20,width=1280,heigh
   videoChild.stdout.on('data',chunk=>{if(closed)return;buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;const complete=Math.floor(buffer.length/frameBytes);if(!complete)return;if(complete>1)buffer=buffer.subarray((complete-1)*frameBytes);const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{const exactFrame=new Uint8Array(frameBytes);exactFrame.set(frame);videoSource.onFrame({width,height,data:exactFrame});lastFrameAt=Date.now()}catch(error){onError(error)}});
   videoChild.stderr.on('data',chunk=>{const message=chunk.toString('utf8').trim();if(message)onError(new Error(message.slice(0,300)))});
   videoChild.once('error',error=>{onError(error);close()});videoChild.once('close',code=>{if(!closed&&code!==0)onError(new Error('WebRTC screen capture exited with code '+code));close()});
-  let audioEnabled=false;
-  try{audioCapture=startSystemAudioLoopback({naudioDll,scriptPath:audioScriptPath,source:audioSource,onError:error=>onError(new Error('System audio: '+error.message))});audioEnabled=true}catch(error){onError(new Error('System audio unavailable: '+error.message))}
-  return {answer:pc.localDescription,close,pc,audioEnabled};
+  startAudioCapture();
+  return {answer:pc.localDescription,close,pc,audioEnabled:true};
  }catch(error){close();throw error}
 }
 module.exports={answerScreenOffer};

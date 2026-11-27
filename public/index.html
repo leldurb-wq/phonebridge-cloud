@@ -1954,8 +1954,8 @@ async function connectLiveScreen(){
   await api('/api/screen/webrtc/offer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.sessionId,offer:pc.localDescription,width:screenRtcWidth,height:screenRtcHeight})});
   let answer=null;for(let i=0;i<50&&screenRunning&&screenRtcPeer===pc;i++){const result=await api('/api/screen/webrtc/answer?sessionId='+encodeURIComponent(session.sessionId));if(result.answer){answer=result.answer;break}await new Promise(resolve=>setTimeout(resolve,400))}
   if(!answer)throw new Error('ThinkPad did not answer the WebRTC connection.');await pc.setRemoteDescription(answer);
-  screenRtcPollTimer=setTimeout(()=>{if(screenRunning&&screenRtcPeer===pc&&pc.connectionState!=='connected'){try{pc.close()}catch{}screenRtcPeer=null;connectLiveScreenJpeg()}},18000);
- }catch(error){if(screenRtcPeer){try{screenRtcPeer.close()}catch{}screenRtcPeer=null}if(screenRunning){say('screenStatus','Direct WebRTC unavailable ('+error.message+'). Switching to compatibility preview?');connectLiveScreenJpeg()}}
+  screenRtcPollTimer=setTimeout(()=>{screenRtcPollTimer=null;if(screenRunning&&screenRtcPeer===pc&&pc.connectionState!=='connected'){say('screenStatus','The direct stream is taking too long. Reconnecting automatically.');scheduleScreenReconnect('Restoring the direct ThinkPad stream.',500)}},18000);
+ }catch(error){if(screenRtcPeer){try{screenRtcPeer.close()}catch{}screenRtcPeer=null}if(screenRunning){say('screenStatus','Live screen interrupted ('+error.message+'). Retrying the direct connection automatically.');scheduleScreenReconnect('Retrying the direct ThinkPad stream.',1200)}}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&screenRunning){void keepScreenSessionAlive();if(screenRtcPeer&&['failed','closed'].includes(screenRtcPeer.connectionState))scheduleScreenReconnect('Restoring your live screen after returning to PhoneBridge.',300)}});window.addEventListener('online',()=>{if(screenRunning&&screenRtcPeer?.connectionState!=='connected')scheduleScreenReconnect('Network restored. Reconnecting your live screen.',500)});
 function disconnectLiveScreen(){

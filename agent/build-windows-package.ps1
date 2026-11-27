@@ -4,7 +4,7 @@ $projectRoot = Split-Path $PSScriptRoot -Parent
 $downloadDir = Join-Path $projectRoot 'public/downloads'
 $target = Join-Path $downloadDir 'PhoneBridge-Agent-Windows.zip'
 $temp = Join-Path $downloadDir ('PhoneBridge-Agent-Windows.' + [guid]::NewGuid().ToString('N') + '.zip')
-$required = @('README.txt', 'Start-PhoneBridge.cmd', 'Start-PhoneBridge-Background.vbs', 'cloud-worker.js', 'credential-store.js', 'enrollment.js', 'reconnect-loop.js', 'local-pairing-bridge.js', 'file-transfer.js', 'screen-capture.js', 'webrtc-screen.js')
+$required = @('README.txt', 'Start-PhoneBridge.cmd', 'Start-PhoneBridge-Background.vbs', 'cloud-worker.js', 'credential-store.js', 'enrollment.js', 'reconnect-loop.js', 'local-pairing-bridge.js', 'file-transfer.js', 'screen-capture.js', 'webrtc-screen.js', 'audio-loopback.js', 'audio-loopback.ps1', 'Install-AudioRuntime.ps1')
 foreach ($name in $required) {
   if (-not (Test-Path -LiteralPath (Join-Path $packageDir $name) -PathType Leaf)) { throw "Windows Agent package source is missing $name." }
 }

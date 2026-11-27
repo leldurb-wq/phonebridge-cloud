@@ -5,8 +5,14 @@ function startSystemAudioLoopback({naudioDll,scriptPath,source,onError=()=>{}}={
  if(process.platform!=='win32')throw new Error('System audio loopback is only available on Windows connectors.');
  if(!naudioDll||!scriptPath)throw new Error('Windows system-audio capture runtime is not installed.');
  const child=spawn('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',scriptPath,'-NaudioDll',naudioDll],{windowsHide:true,stdio:['ignore','pipe','pipe']});
- let stderr='',buffer=Buffer.alloc(0),format=null,closed=false,lastDataAt=Date.now();
+ let stderr='',buffer=Buffer.alloc(0),format=null,closed=false,lastPacketAt=Date.now(),silenceTimer=null;
  const fail=message=>{if(!closed)onError(message instanceof Error?message:new Error(String(message)))};
+ function emitSilence(){
+  if(closed||!format||Date.now()-lastPacketAt<20)return;
+  const numberOfFrames=format.sampleRate/100;
+  if(!Number.isInteger(numberOfFrames))return;
+  try{source.onData({samples:new Int16Array(numberOfFrames*format.channels),sampleRate:format.sampleRate,bitsPerSample:16,channelCount:format.channels,numberOfFrames});lastPacketAt=Date.now()}catch(error){fail(error);stop()}
+ }
  function consume(){
   if(!format)return;
   const bytesPerSample=format.bitsPerSample/8;
@@ -20,7 +26,7 @@ function startSystemAudioLoopback({naudioDll,scriptPath,source,onError=()=>{}}={
    else if(format.encoding==='Pcm'&&format.bitsPerSample===16){for(let i=0;i<samples.length;i++)samples[i]=packet.readInt16LE(i*2)}
    else throw new Error('Unsupported Windows loopback PCM encoding: '+format.encoding+'/'+format.bitsPerSample);
    source.onData({samples,sampleRate:format.sampleRate,bitsPerSample:16,channelCount:format.channels,numberOfFrames:framesPerPacket});
-   lastDataAt=Date.now();
+   lastPacketAt=Date.now();
   }
  }
  child.stdout.on('data',chunk=>{if(closed)return;buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;try{consume()}catch(error){fail(error);stop()}});
@@ -29,15 +35,14 @@ function startSystemAudioLoopback({naudioDll,scriptPath,source,onError=()=>{}}={
   const lines=stderr.split(/\r?\n/);stderr=lines.pop()||'';
   for(const line of lines){
    const match=line.match(/PB_AUDIO_FORMAT:(\d+):(\d+):(\d+):([A-Za-z0-9]+)/);
-   if(match){format={sampleRate:Number(match[1]),channels:Number(match[2]),bitsPerSample:Number(match[3]),encoding:match[4]};try{consume()}catch(error){fail(error);stop()}continue}
+   if(match){format={sampleRate:Number(match[1]),channels:Number(match[2]),bitsPerSample:Number(match[3]),encoding:match[4]};if(!silenceTimer){silenceTimer=setInterval(emitSilence,10);silenceTimer.unref?.()}try{consume()}catch(error){fail(error);stop()}continue}
    if(line.startsWith('PB_AUDIO_ERROR:'))fail(line.slice(15));
    else if(line.trim())fail(new Error('Windows system-audio capture: '+line.trim().slice(0,240)));
   }
  });
  child.once('error',error=>{fail(error);stop()});
- child.once('close',code=>{if(!closed&&code!==0)fail(new Error('Windows system-audio capture exited with code '+code));stop()});
- const watchdog=setInterval(()=>{if(!closed&&Date.now()-lastDataAt>8000){fail(new Error('Windows system-audio capture stopped delivering audio frames.'));stop()}},2000);watchdog.unref?.();
- function stop(){if(closed)return;closed=true;clearInterval(watchdog);buffer=Buffer.alloc(0);try{child.kill()}catch{}}
+ child.once('close',code=>{if(!closed){fail(new Error('Windows system-audio capture exited unexpectedly with code '+code));stop()}});
+ function stop(){if(closed)return;closed=true;if(silenceTimer)clearInterval(silenceTimer);silenceTimer=null;buffer=Buffer.alloc(0);try{child.kill()}catch{}}
  return {stop,child};
 }
 module.exports={startSystemAudioLoopback};
