@@ -10,7 +10,7 @@ const { normalizeCredentials, readCredentials, writeCredentials, uuidPattern, to
 const { runReconnectLoop } = require('./reconnect-loop');
 const { createLocalPairingBridge } = require('./local-pairing-bridge');
 const { receiveTransfer } = require('./file-transfer');
-const { captureScreenJpeg } = require('./screen-capture');
+const { startScreenCaptureStream } = require('./screen-capture');
 
 const cloudUrl = process.env.PHONEBRIDGE_CLOUD_URL || '';
 let parsedCloudUrl;
@@ -166,19 +166,35 @@ async function main() {
     onApproved:code=>redeemApprovedCode(code,activeCredentials)
   });
   if(!credentials)credentials=await waitForPairingCredentials();
-  let screenCaptureStopped=false;
-  const screenCaptureLoop=(async()=>{
-    while(!screenCaptureStopped){
-      const current=activeCredentials;
-      if(current?.deviceId&&current?.agentToken){
-        try{
-          const frame=captureScreenJpeg();
-          await postJson('/api/agent/screen/frame',{deviceId:current.deviceId,imageBase64:frame.toString('base64')},current.agentToken);
-        }catch(error){reportAgentEvent('screen-capture',error);}
+  let screenUploadBusy=false,latestScreenFrame=null,screenRetryTimer=null;
+  async function publishScreenFrame(frame){
+    latestScreenFrame=frame;
+    if(screenUploadBusy||screenRetryTimer)return;
+    screenUploadBusy=true;
+    let inFlightFrame=null;
+    try{
+      while(latestScreenFrame){
+        const nextFrame=latestScreenFrame;latestScreenFrame=null;inFlightFrame=nextFrame;
+        const current=activeCredentials;
+        if(current?.deviceId&&current?.agentToken){
+          await postJson('/api/agent/screen/frame',{deviceId:current.deviceId,imageBase64:nextFrame.toString('base64')},current.agentToken);
+        }
+        inFlightFrame=null;
       }
-      await new Promise(resolve=>setTimeout(resolve,750));
+    }catch(error){
+      if(!latestScreenFrame)latestScreenFrame=inFlightFrame;
+      reportAgentEvent('screen-relay',error);
+      if(!screenRetryTimer)screenRetryTimer=setTimeout(()=>{screenRetryTimer=null;if(latestScreenFrame)void publishScreenFrame(latestScreenFrame)},1200);
+    }finally{
+      screenUploadBusy=false;
+      if(latestScreenFrame&&!screenRetryTimer)void publishScreenFrame(latestScreenFrame);
     }
-  })();
+  }  const screenCapturePublisher=startScreenCaptureStream({
+    frameRate:3,
+    onFrame:frame=>{void publishScreenFrame(frame)},
+    onError:error=>reportAgentEvent('screen-capture',error)
+  });
+  process.once('exit',()=>screenCapturePublisher.stop());
   await runReconnectLoop({
     credentials,
     claim:async current=>{

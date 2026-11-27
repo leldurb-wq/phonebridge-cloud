@@ -3,7 +3,7 @@
 function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope}) {
   const frames=new Map();
   const tickets=new Map();
-  app.post('/api/agent/screen/frame',rateLimit(180,60000),rateLimit(120,60000,agentRateScope),async(req,res)=>{
+  app.post('/api/agent/screen/frame',rateLimit(240,60000),rateLimit(180,60000,agentRateScope),async(req,res)=>{
     res.setHeader('Cache-Control','no-store');
     const deviceId=typeof req.body?.deviceId==='string'?req.body.deviceId:'';
     const token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
@@ -23,12 +23,10 @@ function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLim
     res.setHeader('Cache-Control','no-store');const user=await requireOwner(req,res);if(!user)return;
     try{
       const {data,error}=await supabaseAdmin.from('devices').select('id').eq('user_id',user.id);if(error)throw error;
-      const ids=(data||[]).map(d=>d.id).filter(id=>{const f=frames.get(id);return f&&Date.now()-f.at<5000;});
-      if(!ids.length)return res.status(409).json({ok:false,error:'No live frames from the paired ThinkPad. Start the PhoneBridge Windows connector in your signed-in desktop session.'});
-      const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:ids[0],expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
+      const candidates=(data||[]).map(d=>({deviceId:d.id,frame:frames.get(d.id)})).filter(item=>item.frame&&Date.now()-item.frame.at<5000).sort((a,b)=>b.frame.at-a.frame.at); if(!candidates.length)return res.status(409).json({ok:false,error:'No live frames from the paired ThinkPad. Start the PhoneBridge Windows connector in your signed-in desktop session.'}); const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:candidates[0].deviceId,expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
     }catch(_){return res.status(503).json({ok:false,error:'Could not open the private screen session.'});}
   });
-  app.get('/api/screen/frame',rateLimit(240,60000),(req,res)=>{
+  app.get('/api/screen/frame',rateLimit(600,60000),(req,res)=>{
     res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, private');
     const ticket=typeof req.query.ticket==='string'?req.query.ticket:'';const grant=tickets.get(ticket);
     if(!grant||grant.expiresAt<Date.now()){tickets.delete(ticket);return res.status(401).json({ok:false,error:'The private screen ticket expired. Reconnect to continue.'});}
