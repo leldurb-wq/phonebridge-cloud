@@ -377,5 +377,5 @@ test('live screen relay authenticates paired Windows frames and serves owner-sco
  const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
  const capture=fs.readFileSync(path.join(root,'agent/screen-capture.js'),'utf8');
  assert.match(server,/installScreenRelayRoutes/);assert.match(routes,/device_agents[\s\S]*?token_hash[\s\S]*?enabled/);assert.match(routes,/requireOwner\(req,res\)/);assert.match(routes,/api\/screen\/frame/);assert.match(routes,/X-PB-Frame-At/);assert.match(routes,/Content-Type','image\/jpeg/);
- assert.match(worker,/captureScreenJpeg\(\)/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);assert.match(page,/api\/screen\/frame\?ticket=/);assert.match(page,/setInterval\(pollLiveScreenFrame,400\)/);
+ assert.match(worker,/captureScreenJpeg\(\)/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);assert.match(page,/api\/screen\/frame\?ticket=/);assert.match(page,/pathOnly===\x27\/api\/screen\/ticket\x27&&method===\x27POST\x27/);assert.match(page,/setInterval\(pollLiveScreenFrame,400\)/);
 });
