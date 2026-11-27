@@ -26,6 +26,7 @@ test('post-pairing opens the cinematic feature workspace only after a fresh onli
  assert.match(page,/class="pbx-feature-grid"/);
  assert.equal((page.match(/class="pbx-feature(?: is-limited)?"/g)||[]).length,11);
  for(const feature of ['File transfer','Private Drive','My devices','Audio files','Video files','Secure pairing','Help & privacy','Folder sync','Workspace notes','Screen access','Security controls'])assert.ok(page.includes('<strong>'+feature+'</strong>'),feature+' appears in the workspace');
+ assert.match(page,/<a class="pbx-feature" href="#computer" data-page-link="computer"><span class="pbx-feature-top"><i>▣<\/i><b class="pbx-status is-live">CONNECTOR REQUIRED<\/b><\/span><span><strong>Screen access<\/strong>/);
  assert.match(page,/@keyframes pbx-orbit/);assert.match(page,/@keyframes pbx-card-enter/);assert.match(page,/pbx-workspace-enter/);
  assert.match(page,/body\[data-page\]:not\(\[data-page="overview"\]\) #workspace>#dynamicWorkspace/);
  assert.match(page,/body\[data-page="computer"\] #workspace>#deviceManager/);
