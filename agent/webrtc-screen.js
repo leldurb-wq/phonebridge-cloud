@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const {spawn}=require('node:child_process');
 const {RTCPeerConnection,RTCSessionDescription,MediaStream,nonstandard}=require('@roamhq/wrtc');
 const {RTCVideoSource}=nonstandard;
@@ -17,7 +17,7 @@ async function answerScreenOffer({offer,ffmpegPath,frameRate=20,width=1280,heigh
   if(!pc.localDescription?.sdp)throw new Error('WebRTC did not produce a local answer.');
   child=spawn(ffmpegPath,['-hide_banner','-loglevel','error','-fflags','nobuffer','-flags','low_delay','-thread_queue_size','64','-f','gdigrab','-framerate',String(fps),'-draw_mouse','1','-i','desktop','-an','-vf',`scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,'-pix_fmt','yuv420p','-f','rawvideo','pipe:1'],{windowsHide:true,stdio:['ignore','pipe','pipe']});
   watchdog=setInterval(()=>{if(!closed&&Date.now()-lastFrameAt>5000){onError(new Error('WebRTC capture stalled: no complete desktop frame for 5 seconds.'));close()}},1500);watchdog.unref?.();
-  child.stdout.on('data',chunk=>{if(closed)return;buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;const complete=Math.floor(buffer.length/frameBytes);if(!complete)return;if(complete>1)buffer=buffer.subarray((complete-1)*frameBytes);const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{source.onFrame({width,height,data:frame});lastFrameAt=Date.now()}catch(error){onError(error)}});
+  child.stdout.on('data',chunk=>{if(closed)return;buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;const complete=Math.floor(buffer.length/frameBytes);if(!complete)return;if(complete>1)buffer=buffer.subarray((complete-1)*frameBytes);const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{const exactFrame=new Uint8Array(frameBytes);exactFrame.set(frame);source.onFrame({width,height,data:exactFrame});lastFrameAt=Date.now()}catch(error){onError(error)}});
   child.stderr.on('data',chunk=>{const message=chunk.toString('utf8').trim();if(message)onError(new Error(message.slice(0,300)))});
   child.once('error',error=>{onError(error);close()});child.once('close',code=>{if(!closed&&code!==0)onError(new Error('WebRTC screen capture exited with code '+code));close()});
   return {answer:pc.localDescription,close,pc};
