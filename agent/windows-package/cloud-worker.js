@@ -63,8 +63,32 @@ function secureCredentialPath(target, isDirectory) {
 secureCredentialPath(credentialDir,true);
 
 function getComputerInfo(){
-  const script="$ErrorActionPreference='Stop';$cs=Get-CimInstance Win32_ComputerSystem;$cpu=Get-CimInstance Win32_Processor|Select-Object -First 1;$osInfo=Get-CimInstance Win32_OperatingSystem;$gpu=Get-CimInstance Win32_VideoController|Select-Object -First 1;[pscustomobject]@{model=([string]$cs.Manufacturer+' '+[string]$cs.Model).Trim();os=[string]$osInfo.Caption;osVersion=[string]$osInfo.Version;processor=[string]$cpu.Name;ramGb=[math]::Round([double]$cs.TotalPhysicalMemory/1GB);graphics=[string]$gpu.Name}|ConvertTo-Json -Compress";
-  try{const raw=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:12000});const info=JSON.parse(raw);return{model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number(info.ramGb)||null,graphics:String(info.graphics||'').slice(0,140)};}catch(_){return{os:'Windows'};}
+  const script="$ErrorActionPreference='Stop';$cs=Get-CimInstance Win32_ComputerSystem;$cpu=Get-CimInstance Win32_Processor|Select-Object -First 1;$osInfo=Get-CimInstance Win32_OperatingSystem;$gpu=Get-CimInstance Win32_VideoController|Select-Object -First 1;$bat=Get-CimInstance Win32_Battery|Select-Object -First 1;$brightness=Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue|Select-Object -First 1;[pscustomobject]@{model=([string]$cs.Manufacturer+' '+[string]$cs.Model).Trim();os=[string]$osInfo.Caption;osVersion=[string]$osInfo.Version;processor=[string]$cpu.Name;ramGb=[math]::Round([double]$cs.TotalPhysicalMemory/1GB);graphics=[string]$gpu.Name;batteryPercent=if($bat){[int]$bat.EstimatedChargeRemaining}else{$null};batteryStatus=if($bat){[int]$bat.BatteryStatus}else{$null};brightness=if($brightness){[int]$brightness.CurrentBrightness}else{$null}}|ConvertTo-Json -Compress";
+  try{const raw=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:12000});const info=JSON.parse(raw);return{model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number(info.ramGb)||null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent!==null&&info.batteryPercent!==undefined&&Number.isFinite(Number(info.batteryPercent))?Number(info.batteryPercent):null,batteryStatus:info.batteryStatus!==null&&info.batteryStatus!==undefined&&Number.isFinite(Number(info.batteryStatus))?Number(info.batteryStatus):null,brightness:info.brightness!==null&&info.brightness!==undefined&&Number.isFinite(Number(info.brightness))?Number(info.brightness):null};}catch(_){return{os:'Windows'};}
+}
+function runDeviceCommand(command){
+  const action=command?.action,payload=command?.payload||{};
+  if(action==='set_brightness'){
+    const value=Math.max(0,Math.min(100,Math.round(Number(payload.value))));
+    if(!Number.isFinite(value))throw new Error('Choose a brightness between 0 and 100.');
+    const script="$ErrorActionPreference='Stop';$methods=Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction Stop|Select-Object -First 1;if(-not $methods){throw 'This display does not expose software brightness controls.'};Invoke-CimMethod -InputObject $methods -MethodName WmiSetBrightness -Arguments @{Timeout=1;Brightness="+value+"}|Out-Null;[pscustomobject]@{brightness="+value+"}|ConvertTo-Json -Compress";
+    const raw=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:12000});
+    return JSON.parse(raw);
+  }
+  if(['volume_up','volume_down','volume_mute'].includes(action)){
+    const keys={volume_up:0xAF,volume_down:0xAE,volume_mute:0xAD},key=keys[action];
+    const script="Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class PBVolumeKeys{[DllImport(\"user32.dll\")]public static extern void keybd_event(byte bVk,byte bScan,uint dwFlags,UIntPtr dwExtraInfo);}' -ErrorAction SilentlyContinue;[PBVolumeKeys]::keybd_event("+key+",0,0,[UIntPtr]::Zero);[PBVolumeKeys]::keybd_event("+key+",0,2,[UIntPtr]::Zero)";
+    execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:8000});
+    return{action};
+  }
+  if(action==='open_settings'){
+    const pages={display:'ms-settings:display',sound:'ms-settings:sound',network:'ms-settings:network',bluetooth:'ms-settings:bluetooth',battery:'ms-settings:batterysaver',windows_update:'ms-settings:windowsupdate'};
+    const target=pages[String(payload.page||'')];if(!target)throw new Error('That Windows settings page is not available.');
+    execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"Start-Process '"+target+"'"],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:8000});
+    return{opened:payload.page};
+  }
+  if(action==='refresh_info')return getComputerInfo();
+  throw new Error('This PhoneBridge control is not supported by the computer agent.');
 }
 function postJson(urlPath, body, token) {
   return new Promise((resolve,reject)=>{
@@ -231,7 +255,20 @@ async function main() {
     credentials,
     claim:async current=>{
       if(nextPairingCredentials){const replacement=nextPairingCredentials;nextPairingCredentials=null;return{credentials:replacement};}
-      await postJson('/api/agent/heartbeat',{deviceId:current.deviceId,deviceInfo:getComputerInfo()},current.agentToken);
+      const liveInfo=getComputerInfo();
+      await postJson('/api/agent/heartbeat',{deviceId:current.deviceId,deviceInfo:liveInfo},current.agentToken);
+      const queued=await postJson('/api/agent/commands/claim',{deviceId:current.deviceId},current.agentToken);
+      if(queued?.command){
+        const command=queued.command;
+        try{
+          const result=runDeviceCommand(command);
+          await postJson('/api/agent/commands/'+encodeURIComponent(command.id)+'/result',{deviceId:current.deviceId,success:true,result},current.agentToken);
+          reportAgentEvent('device-command',new Error(command.action+' completed'));
+        }catch(commandError){
+          await postJson('/api/agent/commands/'+encodeURIComponent(command.id)+'/result',{deviceId:current.deviceId,success:false,error:String(commandError.message||commandError).slice(0,300)},current.agentToken);
+          reportAgentEvent('device-command-error',commandError);
+        }
+      }
       const pending=await postJson('/api/agent/transfers/claim',{deviceId:current.deviceId},current.agentToken);
       if(pending?.transfer){
         const transfer=pending.transfer;

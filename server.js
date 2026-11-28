@@ -969,10 +969,31 @@ app.post('/api/agent/enrollment-status', rateLimit(180,10*60*1000), async (req,r
   }catch(_){return res.status(503).json({ok:false,error:'Could not check pairing approval.'});}
 });
 
-// Task execution is intentionally disabled in the customer workspace.
-app.post('/api/commands', rateLimit(30,10*60*1000), (req,res)=>{
+// Narrowly allowlisted device controls. Every command is scoped to a device the signed-in account can access.
+const DEVICE_CONTROL_ACTIONS=new Set(['set_brightness','open_settings','refresh_info','volume_up','volume_down','volume_mute']);
+app.post('/api/commands',rateLimit(30,10*60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
-  return res.status(410).json({ok:false,error:'Computer tasks are not enabled in this PhoneBridge workspace.'});
+  const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device controls are not configured.'});
+  const deviceId=String(req.body?.deviceId||''),action=String(req.body?.action||''),payload=req.body?.payload&&typeof req.body.payload==='object'&&!Array.isArray(req.body.payload)?req.body.payload:{};
+  if(!/^[0-9a-f-]{36}$/i.test(deviceId)||!DEVICE_CONTROL_ACTIONS.has(action))return res.status(400).json({ok:false,error:'Choose a valid paired computer and supported control.'});
+  if(action==='set_brightness'&&(typeof payload.value!=='number'||!Number.isFinite(payload.value)||payload.value<0||payload.value>100))return res.status(400).json({ok:false,error:'Brightness must be between 0 and 100.'});
+  if(action==='open_settings'&&!['display','sound','network','bluetooth','battery','windows_update'].includes(String(payload.page||'')))return res.status(400).json({ok:false,error:'Choose a supported Windows settings page.'});
+  try{
+    if(!await hasDeviceAccess(user.id,deviceId))return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});
+    const {data,error}=await supabaseAdmin.from('device_commands').insert({user_id:user.id,device_id:deviceId,action,payload}).select('id,status,created_at').single();
+    if(error)throw error;
+    return res.status(202).json({ok:true,command:{id:data.id,status:data.status,createdAt:data.created_at}});
+  }catch(error){console.error('[PhoneBridge device control]',error?.message||'unknown error');return res.status(503).json({ok:false,error:'Could not queue this computer control. Check that migration 010 has been applied.'});}
+});
+app.get('/api/commands/:commandId',rateLimit(120,60*1000),async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');const user=await requireOwner(req,res);if(!user)return;
+  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device controls are not configured.'});
+  if(!/^[0-9a-f-]{36}$/i.test(req.params.commandId))return res.status(400).json({ok:false,error:'Invalid command.'});
+  const {data,error}=await supabaseAdmin.from('device_commands').select('id,status,result,error_message').eq('id',req.params.commandId).eq('user_id',user.id).maybeSingle();
+  if(error)return res.status(503).json({ok:false,error:'Could not check command status.'});
+  if(!data)return res.status(404).json({ok:false,error:'Command not found.'});
+  return res.json({ok:true,command:{id:data.id,status:data.status,result:data.result,error:data.error_message}});
 });
 
 // Authenticate paired agents with their per-device bearer credential.
@@ -995,7 +1016,7 @@ async function recordAgentHeartbeat(req,res) {
     if(!data)return res.status(401).json({ok:false,error:'Device authentication failed.'});
     const info=req.body?.deviceInfo;
     if(info&&typeof info==='object'&&!Array.isArray(info)){
-      const clean={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+      const clean={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent===null||info.batteryPercent===undefined?null:Math.max(0,Math.min(100,Number(info.batteryPercent)||0)),batteryStatus:info.batteryStatus===null||info.batteryStatus===undefined?null:Math.max(0,Math.min(255,Number(info.batteryStatus)||0)),brightness:info.brightness===null||info.brightness===undefined?null:Math.max(0,Math.min(100,Number(info.brightness)||0))};
       const {error:infoError}=await supabaseAdmin.from('devices').update({device_info:clean}).eq('id',deviceId);
       if(infoError)throw infoError;
     }
@@ -1007,12 +1028,21 @@ async function recordAgentHeartbeat(req,res) {
 installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope,getAccessibleDeviceIds});
 installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,getAccessibleDeviceIds});
 app.post('/api/agent/heartbeat', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
-// Compatibility route for already-installed Agents; it now only updates status.
-app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
-
-app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  return res.status(410).json({ok:false,error:'Computer task execution is not enabled in this PhoneBridge workspace.'});
+// Authenticated Windows-agent command relay. The RPC verifies the per-device token hash.
+app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device broker is not configured.'});
+  const deviceId=String(req.body?.deviceId||''),token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)||!token)return res.status(401).json({ok:false,error:'Device authentication required.'});
+  try{const tokenHash=crypto.createHash('sha256').update(token).digest('hex');const {data,error}=await supabaseAdmin.rpc('phonebridge_claim_device_command',{p_device_id:deviceId,p_token_hash:tokenHash});if(error)throw error;return res.json({ok:true,command:data||null});}
+  catch(error){console.error('[PhoneBridge command claim]',error?.message||'unknown error');return res.status(503).json({ok:false,error:'Could not claim a device control.'});}
+});
+app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), async(req,res)=>{
+  res.setHeader('Cache-Control','no-store');if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device broker is not configured.'});
+  const deviceId=String(req.body?.deviceId||''),token=/^Bearer ([A-Za-z0-9_-]{40,50})$/.exec(req.get('authorization')||'')?.[1]||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)||!token||!/^[0-9a-f-]{36}$/i.test(req.params.commandId))return res.status(401).json({ok:false,error:'Device authentication required.'});
+  const success=req.body?.success===true,result=req.body?.result&&typeof req.body.result==='object'&&!Array.isArray(req.body.result)?req.body.result:null,errorMessage=String(req.body?.error||'').slice(0,500);
+  try{const tokenHash=crypto.createHash('sha256').update(token).digest('hex');const {data,error}=await supabaseAdmin.rpc('phonebridge_complete_device_command',{p_device_id:deviceId,p_token_hash:tokenHash,p_command_id:req.params.commandId,p_success:success,p_result:result,p_error:errorMessage});if(error)throw error;if(!data)return res.status(409).json({ok:false,error:'Command is no longer active.'});return res.json({ok:true});}
+  catch(error){console.error('[PhoneBridge command result]',error?.message||'unknown error');return res.status(503).json({ok:false,error:'Could not save the device-control result.'});}
 });
 
 // Windows agent redeems a one-time pairing code for a long-lived per-device bearer token.
@@ -1043,7 +1073,7 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
   const {data:claimed,error:claimError}=await supabaseAdmin.from('device_enrollments').update({consumed_at:now}).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();if(claimError)throw claimError;if(!claimed)return res.status(409).json({ok:false,error:'Pairing code has already been used or expired.'});
   if(existingDevice){
    const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
-   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent==null?null:Math.max(0,Math.min(100,Number(info.batteryPercent)||0)),batteryStatus:info.batteryStatus==null?null:Math.max(0,Math.min(255,Number(info.batteryStatus)||0)),brightness:info.brightness==null?null:Math.max(0,Math.min(100,Number(info.brightness)||0))};
    const {error:infoError}=await supabaseAdmin.from('devices').update({device_info:deviceInfo}).eq('id',deviceId);if(infoError)throw infoError;
    const {error:accessError}=await supabaseAdmin.from('device_access').upsert({device_id:deviceId,user_id:ticket.user_id,role:existingDevice.user_id===ticket.user_id?'owner':'member'},{onConflict:'device_id,user_id',ignoreDuplicates:true});if(accessError)throw accessError;
   }else{
@@ -1051,7 +1081,7 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
    if(owned?.length)return res.status(409).json({ok:false,error:'This account already has a paired computer. Use its existing computer pairing flow.'});
    agentToken=crypto.randomBytes(32).toString('base64url');const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
    const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
-   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent==null?null:Math.max(0,Math.min(100,Number(info.batteryPercent)||0)),batteryStatus:info.batteryStatus==null?null:Math.max(0,Math.min(255,Number(info.batteryStatus)||0)),brightness:info.brightness==null?null:Math.max(0,Math.min(100,Number(info.brightness)||0))};
    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:requestedDeviceName||ticket.device_name,device_type:'windows_agent',device_info:deviceInfo}).select('id,user_id').single();if(deviceError||!device)throw deviceError||new Error('Device record was not created.');deviceId=device.id;
    const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
    const {error:accessError}=await supabaseAdmin.from('device_access').insert({device_id:deviceId,user_id:ticket.user_id,role:'owner'});if(accessError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw accessError;}

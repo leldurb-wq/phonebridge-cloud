@@ -198,14 +198,14 @@ test('main PhoneBridge computer view keeps pairing and status without task tools
  assert.match(detail,/View your paired computer connection and open its live desktop/);assert.doesNotMatch(detail,/systemInfo|listFiles|readFile|writeFile|createFolder|launchApp|commandList|Recent tasks|remote-keyboard-toggle|screenFrame/);
 });
 
-test('cloud customer API disables tasks while preserving authenticated device heartbeat',()=>{
+test('cloud customer API exposes allowlisted device controls through authenticated command relay',()=>{
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8');const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
- assert.match(server,/app\.post\('\/api\/commands'[\s\S]*?status\(410\)/);
+ assert.match(server,/app\.post\('\/api\/commands'[\s\S]*?DEVICE_CONTROL_ACTIONS/); assert.match(server,/app\.get\('\/api\/commands\/:commandId'/);
  assert.match(server,/app\.post\('\/api\/agent\/heartbeat'[\s\S]*?recordAgentHeartbeat/);
- assert.match(server,/commands\/claim'[\s\S]*?recordAgentHeartbeat/);
- assert.doesNotMatch(server,/rpc\('phonebridge_(claim|complete)_device_command'/);
+ assert.match(server,/rpc\('phonebridge_claim_device_command'/); assert.match(server,/rpc\('phonebridge_complete_device_command'/);
+ assert.match(server,/app\.post\('\/api\/agent\/commands\/claim'[\s\S]*?phonebridge_claim_device_command/);
  assert.match(worker,/postJson\('\/api\/agent\/heartbeat'/);
- assert.doesNotMatch(worker,/commands\/claim|commands\/.*\/result|workspace-tasks|function execute|allowedActions|safePath/);
+ assert.match(worker,/commands\/claim/); assert.match(worker,/commands\/.*\/result/); assert.match(worker,/function runDeviceCommand/); assert.match(worker,/WmiSetBrightness/); assert.match(worker,/ms-settings:bluetooth/);
 });
 
 test('computer-initiated pairing requires approval from the signed-in phone before enrollment',()=>{
@@ -289,9 +289,9 @@ test('downloadable Windows Agent archive contains its launcher and every current
 
 test('pairing and command relay use reviewed migrations in order and service-role-only RPC grants',()=>{
  const dir=path.join(root,'supabase/migrations');const files=fs.readdirSync(dir).filter(name=>name.endsWith('.sql')).sort();
- assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql','007_multi_account_device_access.sql','008_workspace_services.sql','009_computer_identity.sql']);
+ assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql','007_multi_account_device_access.sql','008_workspace_services.sql','009_computer_identity.sql','010_device_controls.sql']);
  const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');const transfers=fs.readFileSync(path.join(dir,files[4]),'utf8');const bidirectional=fs.readFileSync(path.join(dir,files[5]),'utf8');const sharedAccess=fs.readFileSync(path.join(dir,files[6]),'utf8');const workspace=fs.readFileSync(path.join(dir,files[7]),'utf8');
- const computerIdentity=fs.readFileSync(path.join(dir,files[8]),'utf8');assert.match(computerIdentity,/add column if not exists device_info jsonb/);
+ const computerIdentity=fs.readFileSync(path.join(dir,files[8]),'utf8');assert.match(computerIdentity,/add column if not exists device_info jsonb/);const deviceControls=fs.readFileSync(path.join(dir,files[9]),'utf8');assert.match(deviceControls,/device_commands_action_check/);assert.match(deviceControls,/set_brightness/);assert.match(deviceControls,/open_settings/);
  assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);assert.match(sharedAccess,/create table if not exists public\.device_access/);assert.match(sharedAccess,/grant all on public\.device_access to service_role/);assert.match(workspace,/create table if not exists public\.drive_folders/);assert.match(workspace,/create table if not exists public\.sync_items/);assert.match(workspace,/create table if not exists public\.sync_history/);assert.match(workspace,/create table if not exists public\.note_versions/);assert.match(workspace,/grant all on public\.drive_folders,public\.sync_items,public\.sync_history,public\.note_versions to service_role/);
  assert.match(relay,/create table if not exists public\.device_agents/);assert.match(relay,/create table if not exists public\.device_enrollments/);assert.match(relay,/create table if not exists public\.device_commands/);assert.match(relay,/revoke all on public\.device_agents from anon, authenticated/);assert.match(relay,/device commands owner read/);
  assert.match(rpc,/create or replace function public\.phonebridge_claim_device_command/);assert.match(rpc,/create or replace function public\.phonebridge_complete_device_command/);assert.match(rpc,/grant execute on function public\.phonebridge_claim_device_command\(uuid, text\) to service_role/);assert.match(rpc,/grant execute on function public\.phonebridge_complete_device_command\([\s\S]*?to service_role/);assert.match(pairing,/add column if not exists approved_at timestamptz/);assert.ok(transfers.includes('create table if not exists public.phone_transfers'));assert.ok(transfers.includes('create table if not exists public.phone_transfer_chunks'));assert.ok(transfers.includes('transfer-chunks'));assert.ok(transfers.includes('grant all on public.phone_transfers, public.phone_transfer_chunks to service_role'));assert.match(bidirectional,/add column if not exists direction text not null default 'phone_to_pc'/);assert.match(bidirectional,/create table if not exists public.phone_transfer_clients/);assert.match(bidirectional,/primary key \(user_id,id\)/);assert.match(bidirectional,/grant all on public.phone_transfer_clients to service_role/);
@@ -301,7 +301,7 @@ test('pairing and command relay use reviewed migrations in order and service-rol
 
 test('paired computer profiles are reported by the Windows agent and shown with each session',()=>{
  const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');const server=fs.readFileSync(path.join(root,'server.js'),'utf8');const page=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
- assert.match(worker,/function getComputerInfo\(\)/);assert.match(worker,/deviceInfo:getComputerInfo\(\)/);assert.match(server,/device_info:clean/);assert.match(server,/deviceInfo:d\.device_info\|\|\{\}/);assert.match(page,/device\.deviceInfo\|\|\{\}/);assert.match(page,/info\.processor/);assert.match(page,/info\.graphics/);
+ assert.match(worker,/function getComputerInfo\(\)/);assert.match(worker,/deviceInfo:getComputerInfo\(\)/);assert.match(worker,/batteryPercent/);assert.match(worker,/WmiMonitorBrightness/);assert.match(server,/device_info:clean/);assert.match(server,/deviceInfo:d\.device_info\|\|\{\}/);assert.match(page,/device\.deviceInfo\|\|\{\}/);assert.match(page,/info\.processor/);assert.match(page,/info\.graphics/);assert.match(page,/ABOUT DEVICE/);assert.match(page,/data-device-brightness/);assert.match(page,/data-device-action=\"volume_up\"/);assert.match(page,/data-device-setting=\"bluetooth\"/);
 });
 
 test('pairing codes are created only for the bearer account, expire in five minutes and are stored as HMACs',()=>{
