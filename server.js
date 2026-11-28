@@ -1053,10 +1053,12 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
  const codeHash=hashEnrollmentCode(code,serviceKey),previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:'',previousAgentToken=typeof req.body?.previousAgentToken==='string'&&/^[A-Za-z0-9_-]{40,50}$/.test(req.body.previousAgentToken)?req.body.previousAgentToken:'',requestedDeviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
  if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
  if(requestedDeviceName.length>80)return res.status(400).json({ok:false,error:'Computer name must be 80 characters or fewer.'});
+ let enrollmentTicketId=null;
  try{
   let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(findError)throw findError;
   if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
   if(!ticket)return res.status(401).json({ok:false,error:'Invalid or expired pairing code.'});
+  enrollmentTicketId=ticket.id;
   if(!ticket.approved_at)return res.status(403).json({ok:false,error:'Open PhoneBridge on your phone and approve this computer first.'});
   let existingDevice=null,agentToken='',deviceId='',reusedCredential=false;
   if(previousDeviceId){
@@ -1087,7 +1089,18 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
    const {error:accessError}=await supabaseAdmin.from('device_access').insert({device_id:deviceId,user_id:ticket.user_id,role:'owner'});if(accessError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw accessError;}
   }
   return res.status(201).json({ok:true,deviceId,deviceName:existingDevice?.name||requestedDeviceName||ticket.device_name,agentToken,reusedCredential});
- }catch(error){console.error('[PhoneBridge multi-account enrollment]',error?.message||'unknown error');return res.status(503).json({ok:false,error:'Device enrollment could not be completed. Check that migration 007 has been applied.'});}
+ }catch(error){
+  // A failed provisioning attempt must not burn the approved one-time code.
+  // Release our claim so the computer can safely retry after a transient DB/schema fix.
+  if(enrollmentTicketId){
+   try{await supabaseAdmin.from('device_enrollments').update({consumed_at:null}).eq('id',enrollmentTicketId);}
+   catch(releaseError){console.error('[PhoneBridge enrollment ticket release]',releaseError?.message||'unknown error');}
+  }
+  const detail=String(error?.message||'unknown error');
+  console.error('[PhoneBridge multi-account enrollment]',detail);
+  const migrationIssue=/device_access|relation .* does not exist|permission denied/i.test(detail);
+  return res.status(503).json({ok:false,error:migrationIssue?'Computer access setup is incomplete. Apply the complete Supabase migration 007, then start a new pairing code.':'The computer could not finish registration. Start a new pairing code and try again.'});
+ }
 });
 
 // Unknown legacy/local APIs must not fall through to the SPA and look successful.
