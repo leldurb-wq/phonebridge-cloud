@@ -1,20 +1,19 @@
-PHONEBRIDGE WINDOWS BACKGROUND CONNECTOR
+PHONEBRIDGE WINDOWS CONNECTOR
 
 Requirements: Windows 10/11 and Node.js 20 or later.
 
-ONE-TIME SETUP
+FIRST START
 1. Install Node.js 20 or later from https://nodejs.org/.
-2. Extract this package to a folder on your computer.
-3. Double-click Start-PhoneBridge.cmd. It starts the PhoneBridge connector quietly in the background. No terminal or Agent window is shown.
-4. Open https://phonebridge.msbundle.store in your computer browser and sign in.
-5. In PhoneBridge on the computer, tap Pair this computer. A six-digit code appears and expires after five minutes.
-6. Open PhoneBridge on your phone, sign in to the same account, enter the code and tap Connect.
-7. The computer connects automatically after approval.
+2. Extract the entire ZIP into a normal folder (do not run files from inside the ZIP).
+3. Double-click Start-PhoneBridge.cmd. Keep internet access enabled while the first-run runtimes install. The launcher installs FFmpeg and WebRTC automatically into your Windows user profile, then starts PhoneBridge quietly.
+4. Open https://phonebridge.msbundle.store on your computer and sign in.
+5. Select Pair this computer. The computer displays a six-digit code that expires after five minutes.
+6. Open PhoneBridge on your phone, sign in, enter the code and tap Connect.
 
-The connector runs locally on 127.0.0.1 and makes outbound HTTPS connections to PhoneBridge Cloud. It does not require Tailscale, a public IP address, router port forwarding, or opening a firewall port.
+IMPORTANT: Always start the connector by double-clicking Start-PhoneBridge.cmd. Do not launch cloud-worker.js directly; the launcher prepares the FFmpeg and WebRTC module paths first.
 
-The local browser connection accepts requests only from the official PhoneBridge website. Pairing codes are short-lived and single-use. The phone must be signed in to the same account that owns the computer.
+The connector uses localhost and outbound HTTPS. It does not require Tailscale, a public IP address, router port forwarding, or an inbound firewall port. The connector accepts local browser requests only from the official PhoneBridge website.
 
-The connector maintains secure enrollment and quietly checks for authorized file transfers. It writes only completed, integrity-checked transfers to Documents\\PhoneBridge\\Incoming. Files are delivered in 8 MB chunks, up to 2 GB per file. Temporary network interruptions are retried; verified chunks and completed files are checked again before resuming, so retries do not create duplicate files. A private diagnostic log is written to AppData\\Local\\PhoneBridge\\Agent\\connector.log. It does not expose a terminal, launch apps, or execute arbitrary remote tasks. Live screen viewing uses a direct WebRTC audio/video connection when the network allows it, targeting 20 FPS at up to 720p and adapting to available network capacity. Windows system audio is captured using WASAPI loopback (the sound playing through the computer's selected output, not its microphone) and streamed to the phone with the live screen. iPhone browsers may require one tap on the audio player to begin playback. A JPEG compatibility preview remains available when direct peer-to-peer connectivity cannot be established. The first launch downloads the FFmpeg, WebRTC and NAudio audio-capture runtimes. Remote mouse/keyboard input is not enabled.
+Files received from the phone are verified and saved under Documents\PhoneBridge\Incoming. Transfers use verified 8 MB chunks and support files up to 2 GB. A private diagnostic log is written to AppData\Local\PhoneBridge\Agent\connector.log. Remote mouse/keyboard input is not enabled.
 
-Existing device credentials remain in the current Windows user profile under AppData\\Local\\PhoneBridge\\Agent.
+Existing device credentials remain under AppData\Local\PhoneBridge\Agent.
