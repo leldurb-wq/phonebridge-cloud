@@ -62,6 +62,10 @@ function secureCredentialPath(target, isDirectory) {
 
 secureCredentialPath(credentialDir,true);
 
+function getComputerInfo(){
+  const script="$ErrorActionPreference='Stop';$cs=Get-CimInstance Win32_ComputerSystem;$cpu=Get-CimInstance Win32_Processor|Select-Object -First 1;$osInfo=Get-CimInstance Win32_OperatingSystem;$gpu=Get-CimInstance Win32_VideoController|Select-Object -First 1;[pscustomobject]@{model=([string]$cs.Manufacturer+' '+[string]$cs.Model).Trim();os=[string]$osInfo.Caption;osVersion=[string]$osInfo.Version;processor=[string]$cpu.Name;ramGb=[math]::Round([double]$cs.TotalPhysicalMemory/1GB);graphics=[string]$gpu.Name}|ConvertTo-Json -Compress";
+  try{const raw=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:12000});const info=JSON.parse(raw);return{model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number(info.ramGb)||null,graphics:String(info.graphics||'').slice(0,140)};}catch(_){return{os:'Windows'};}
+}
 function postJson(urlPath, body, token) {
   return new Promise((resolve,reject)=>{
     const url = new URL(urlPath, cloudUrl);
@@ -140,7 +144,7 @@ function waitForPairingCredentials(){
 }
 async function redeemApprovedCode(code,previous){
   const installationId=previous?.installationId||crypto.randomUUID();
-  const result=await postJson('/api/agent/enroll',{enrollmentCode:code,previousDeviceId:previous?.deviceId||null,previousAgentToken:previous?.agentToken||null,deviceName:os.hostname().trim().slice(0,80)||'Windows computer'});
+  const result=await postJson('/api/agent/enroll',{enrollmentCode:code,previousDeviceId:previous?.deviceId||null,previousAgentToken:previous?.agentToken||null,deviceName:os.hostname().trim().slice(0,80)||'Windows computer',deviceInfo:getComputerInfo()});
   const nextToken=result?.reusedCredential===true&&previous?.deviceId===result.deviceId&&tokenPattern.test(previous?.agentToken||'')?previous.agentToken:result?.agentToken;
   if(!result?.ok||!uuidPattern.test(result.deviceId||'')||!tokenPattern.test(nextToken||'')||typeof result.deviceName!=='string'||!result.deviceName.trim()||result.deviceName.length>80)throw new Error('PhoneBridge returned invalid device credentials.');
   const value=normalizeCredentials({deviceId:result.deviceId,deviceName:result.deviceName,agentToken:nextToken,installationId,cloudUrl:parsedCloudUrl.origin,enrolledAt:new Date().toISOString()});
@@ -227,7 +231,7 @@ async function main() {
     credentials,
     claim:async current=>{
       if(nextPairingCredentials){const replacement=nextPairingCredentials;nextPairingCredentials=null;return{credentials:replacement};}
-      await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+      await postJson('/api/agent/heartbeat',{deviceId:current.deviceId,deviceInfo:getComputerInfo()},current.agentToken);
       const pending=await postJson('/api/agent/transfers/claim',{deviceId:current.deviceId},current.agentToken);
       if(pending?.transfer){
         const transfer=pending.transfer;
@@ -236,7 +240,7 @@ async function main() {
           transfer,
           baseDir:path.join(resolveDocumentsDirectory(),'PhoneBridge','Incoming'),
           downloadChunk:async(id,index)=>{
-            if(chunksSinceHeartbeat++%3===0)await postJson('/api/agent/heartbeat',{deviceId:current.deviceId},current.agentToken);
+            if(chunksSinceHeartbeat++%3===0)await postJson('/api/agent/heartbeat',{deviceId:current.deviceId,deviceInfo:getComputerInfo()},current.agentToken);
             return getBinary('/api/agent/transfers/'+encodeURIComponent(id)+'/chunks/'+index+'?deviceId='+encodeURIComponent(current.deviceId),current.agentToken);
           },
           complete:result=>postJson('/api/agent/transfers/'+encodeURIComponent(transfer.id)+'/complete',{deviceId:current.deviceId,...result},current.agentToken)

@@ -875,10 +875,10 @@ app.get('/api/devices',rateLimit(60,60*1000),async(req,res)=>{
  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
  try{
   const ids=await getAccessibleDeviceIds(user.id);if(!ids.length)return res.json({ok:true,devices:[]});
-  const {data:devices,error}=await supabaseAdmin.from('devices').select('id,user_id,name,device_type,created_at,device_agents(last_seen_at,enabled)').in('id',ids).order('created_at',{ascending:false});if(error)throw error;
+  const {data:devices,error}=await supabaseAdmin.from('devices').select('id,user_id,name,device_type,device_info,created_at,device_agents(last_seen_at,enabled)').in('id',ids).order('created_at',{ascending:false});if(error)throw error;
   const {data:members,error:memberError}=await supabaseAdmin.from('device_access').select('device_id').in('device_id',ids);if(memberError)throw memberError;
   const counts=new Map();for(const row of members||[])counts.set(row.device_id,(counts.get(row.device_id)||0)+1);
-  const now=Date.now();return res.json({ok:true,devices:(devices||[]).map(d=>{const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents,seen=agent?.last_seen_at||null;return{id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now),isOwner:d.user_id===user.id,authorizedAccounts:counts.get(d.id)||1,maxAuthorizedAccounts:10};})});
+  const now=Date.now();return res.json({ok:true,devices:(devices||[]).map(d=>{const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents,seen=agent?.last_seen_at||null;return{id:d.id,name:d.name,deviceType:d.device_type,deviceInfo:d.device_info||{},createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now),isOwner:d.user_id===user.id,authorizedAccounts:counts.get(d.id)||1,maxAuthorizedAccounts:10};})});
  }catch(_){return res.status(503).json({ok:false,error:'Could not load devices. Check that migration 007 has been applied.'});}
 });
 // Members can remove their own access; only the original owner can rename or revoke the whole computer.
@@ -993,6 +993,12 @@ async function recordAgentHeartbeat(req,res) {
       .eq('device_id',deviceId).eq('token_hash',tokenHash).eq('enabled',true).select('device_id').maybeSingle();
     if (error) throw error;
     if(!data)return res.status(401).json({ok:false,error:'Device authentication failed.'});
+    const info=req.body?.deviceInfo;
+    if(info&&typeof info==='object'&&!Array.isArray(info)){
+      const clean={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+      const {error:infoError}=await supabaseAdmin.from('devices').update({device_info:clean}).eq('id',deviceId);
+      if(infoError)throw infoError;
+    }
     return res.json({ok:true,lastSeenAt:now});
   } catch (error) {
     return res.status(503).json({ok:false,error:'Could not update computer status.'});
@@ -1036,12 +1042,17 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
   const now=new Date().toISOString();
   const {data:claimed,error:claimError}=await supabaseAdmin.from('device_enrollments').update({consumed_at:now}).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();if(claimError)throw claimError;if(!claimed)return res.status(409).json({ok:false,error:'Pairing code has already been used or expired.'});
   if(existingDevice){
+   const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
+   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+   const {error:infoError}=await supabaseAdmin.from('devices').update({device_info:deviceInfo}).eq('id',deviceId);if(infoError)throw infoError;
    const {error:accessError}=await supabaseAdmin.from('device_access').upsert({device_id:deviceId,user_id:ticket.user_id,role:existingDevice.user_id===ticket.user_id?'owner':'member'},{onConflict:'device_id,user_id',ignoreDuplicates:true});if(accessError)throw accessError;
   }else{
    const {data:owned,error:ownedError}=await supabaseAdmin.from('devices').select('id').eq('user_id',ticket.user_id).limit(1);if(ownedError)throw ownedError;
    if(owned?.length)return res.status(409).json({ok:false,error:'This account already has a paired computer. Use its existing computer pairing flow.'});
    agentToken=crypto.randomBytes(32).toString('base64url');const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
-   const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:requestedDeviceName||ticket.device_name,device_type:'windows_agent'}).select('id,user_id').single();if(deviceError||!device)throw deviceError||new Error('Device record was not created.');deviceId=device.id;
+   const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
+   const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140)};
+   const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:requestedDeviceName||ticket.device_name,device_type:'windows_agent',device_info:deviceInfo}).select('id,user_id').single();if(deviceError||!device)throw deviceError||new Error('Device record was not created.');deviceId=device.id;
    const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
    const {error:accessError}=await supabaseAdmin.from('device_access').insert({device_id:deviceId,user_id:ticket.user_id,role:'owner'});if(accessError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw accessError;}
   }
