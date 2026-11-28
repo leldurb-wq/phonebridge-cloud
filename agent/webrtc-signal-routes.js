@@ -1,5 +1,5 @@
 ﻿'use strict';
-function installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit}){
+function installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,getAccessibleDeviceIds}){
  const sessions=new Map();
  function stale(s){return Date.now()-(s.updatedAt||s.createdAt)>120000}
  function prune(){for(const [id,s] of sessions)if(stale(s))sessions.delete(id)}
@@ -19,8 +19,8 @@ function installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLi
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Screen relay is not configured.'});
   try{
    prune();
-   const {data,error}=await supabaseAdmin.from('devices').select('id').eq('user_id',user.id);if(error)throw error;
-   const active=(data||[]).map(d=>d.id).find(id=>global.__pbScreenFrames?.get?.(id)&&Date.now()-global.__pbScreenFrames.get(id).at<10000);
+   const ids=await getAccessibleDeviceIds(user.id);
+   const active=ids.find(id=>global.__pbScreenFrames?.get?.(id)&&Date.now()-global.__pbScreenFrames.get(id).at<10000);
    if(!active)return res.status(409).json({ok:false,error:'No live ThinkPad connector is online.'});
    const sessionId=crypto.randomBytes(24).toString('base64url');
    sessions.set(sessionId,{userId:user.id,deviceId:active,offer:null,answer:null,createdAt:Date.now(),updatedAt:Date.now(),claimedAt:0});

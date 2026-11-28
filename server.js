@@ -122,7 +122,19 @@ app.get('/api/account', async (req,res)=>{
     return res.status(503).json({ ok:false, error:'Authentication service is temporarily unavailable.' });
   }
 });
+async function getAccessibleDeviceIds(userId) {
+ if(!supabaseAdmin)throw new Error('Device service is not configured.');
+ const [{data:owned,error:ownedError},{data:shared,error:sharedError}]=await Promise.all([
+  supabaseAdmin.from('devices').select('id').eq('user_id',userId),
+  supabaseAdmin.from('device_access').select('device_id').eq('user_id',userId)
+ ]);
+ if(ownedError)throw ownedError;if(sharedError)throw sharedError;
+ return [...new Set([...(owned||[]).map(x=>x.id),...(shared||[]).map(x=>x.device_id)])];
+}
+async function hasDeviceAccess(userId,deviceId){return (await getAccessibleDeviceIds(userId)).includes(deviceId);}
+
 async function requireOwner(req, res) {
+
   if (!supabaseAuth) { res.status(503).json({ ok:false, error:'Authentication service is not configured.' }); return null; }
   const match = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(req.get('authorization') || '');
   if (!match) { res.status(401).json({ ok:false, error:'Sign-in required.' }); return null; }
@@ -146,8 +158,7 @@ app.post('/api/screen-sessions',rateLimit(8,60*1000),async(req,res)=>{
   const deviceId=String(req.body?.deviceId||'');
   if(!/^[0-9a-f-]{36}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a paired computer first.'});
   try{
-    const {data:device,error}=await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
-    if(error)throw error;if(!device)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});
+    const allowed=await hasDeviceAccess(user.id,deviceId);if(!allowed)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});
     for(const [id,s] of screenSessions)if(s.ownerId===user.id&&s.deviceId===deviceId)screenSessions.delete(id);
     const id=crypto.randomUUID(),now=Date.now();
     screenSessions.set(id,{id,ownerId:user.id,deviceId,createdAt:now,expiresAt:now+SCREEN_SESSION_TTL,viewerJoined:false,signals:{publisher:[],viewer:[]}});
@@ -159,8 +170,7 @@ app.get('/api/devices/:deviceId/screen-session',rateLimit(60,60*1000),async(req,
   const user=await requireOwner(req,res);if(!user)return;
   const deviceId=req.params.deviceId;
   try{
-    const {data:device,error}=await supabaseAdmin.from('devices').select('id').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
-    if(error)throw error;if(!device)return res.status(404).json({ok:false,error:'Paired computer not found.'});
+    const allowed=await hasDeviceAccess(user.id,deviceId);if(!allowed)return res.status(404).json({ok:false,error:'Paired computer not found.'});
     const session=[...screenSessions.values()].find(s=>s.deviceId===deviceId&&s.ownerId===user.id&&s.expiresAt>Date.now());
     return res.json({ok:true,session:session?{id:session.id,expiresAt:new Date(session.expiresAt).toISOString()}:null});
   }catch(_){return res.status(503).json({ok:false,error:'Could not check screen sharing status.'})}
@@ -591,7 +601,8 @@ app.post('/api/transfers',rateLimit(20,10*60*1000),async(req,res)=>{
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose the connected ThinkPad.'});
   if(!Number.isSafeInteger(size)||size<1||size>PC_TRANSFER_MAX)return res.status(413).json({ok:false,error:'Choose a file up to 2 GB.'});
   try{
-    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,device_agents(enabled,last_seen_at)').eq('id',deviceId).eq('user_id',user.id).maybeSingle();
+    const allowed=await hasDeviceAccess(user.id,deviceId);if(!allowed)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});
+    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,device_agents(enabled,last_seen_at)').eq('id',deviceId).maybeSingle();
     if(deviceError)throw deviceError;
     const agent=Array.isArray(device?.device_agents)?device.device_agents[0]:device?.device_agents;
     if(!device||!agent?.enabled||!isDeviceOnline(agent.enabled,agent.last_seen_at))return res.status(409).json({ok:false,error:'The ThinkPad connector is offline. Reconnect it and try again.'});
@@ -831,15 +842,15 @@ app.post('/api/agent/transfers/:transferId/complete',rateLimit(60,10*60*1000),as
   try{
     const now=new Date().toISOString();
     const changes={status,updated_at:now,error_message:status==='completed'?null:String(req.body?.error||(status==='failed'?'Transfer failed':'Transfer will retry')).slice(0,240),...(status==='completed'?{completed_at:now}: {})};
-    const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').eq('status','receiving').select('id,file_name,mime_type,size_bytes,created_at').maybeSingle();
+    const {data,error}=await supabaseAdmin.from('phone_transfers').update(changes).eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').eq('status','receiving').select('id,user_id,file_name,mime_type,size_bytes,created_at').maybeSingle();
     if(error)throw error;
     if(!data){
-      const {data:existing,error:existingError}=await supabaseAdmin.from('phone_transfers').select('id,status,file_name,mime_type,size_bytes,created_at').eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').maybeSingle();
+      const {data:existing,error:existingError}=await supabaseAdmin.from('phone_transfers').select('id,user_id,status,file_name,mime_type,size_bytes,created_at').eq('id',req.params.transferId).eq('device_id',agent.deviceId).eq('direction','phone_to_pc').maybeSingle();
       if(existingError)throw existingError;
-      if(existing?.status===status){if(status==='completed')await ensureTransferInDrive(agent.userId,existing);return res.json({ok:true,status,idempotent:true})}
+      if(existing?.status===status){if(status==='completed')await ensureTransferInDrive(existing.user_id,existing);return res.json({ok:true,status,idempotent:true})}
       return res.status(404).json({ok:false,error:'Transfer not found or already finished.'});
     }
-    if(status==='completed')await ensureTransferInDrive(agent.userId,data);
+    if(status==='completed')await ensureTransferInDrive(data.user_id,data);
     if(status==='failed'){
       const {data:chunks}=await supabaseAdmin.from('phone_transfer_chunks').select('object_path').eq('transfer_id',req.params.transferId);
       const paths=(chunks||[]).map(c=>c.object_path);
@@ -850,24 +861,19 @@ app.post('/api/agent/transfers/:transferId/complete',rateLimit(60,10*60*1000),as
   }catch(_){return res.status(503).json({ok:false,error:'Could not save the transfer result.'});}
 });
 
-// Owner-scoped device list for the main PhoneBridge workspace.
-app.get('/api/devices', rateLimit(60,60*1000), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  const user = await requireOwner(req,res);
-  if (!user) return;
-  if (!supabaseAdmin) return res.status(503).json({ok:false,error:'Device service is not configured.'});
-  try {
-    const {data:devices,error} = await supabaseAdmin.from('devices').select('id,name,device_type,created_at,device_agents(last_seen_at,enabled)').eq('user_id',user.id).order('created_at',{ascending:false});
-    if(error) throw error;
-    const now=Date.now();
-    return res.json({ok:true,devices:(devices||[]).map(d=>{
-      const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents;
-      const seen=agent?.last_seen_at||null;
-      return {id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now)};
-    })});
-  } catch (_) { return res.status(503).json({ok:false,error:'Could not load devices. Check the relay database migrations.'}); }
+// List devices owned by or shared with the signed-in PhoneBridge account.
+app.get('/api/devices',rateLimit(60,60*1000),async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');const user=await requireOwner(req,res);if(!user)return;
+ if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
+ try{
+  const ids=await getAccessibleDeviceIds(user.id);if(!ids.length)return res.json({ok:true,devices:[]});
+  const {data:devices,error}=await supabaseAdmin.from('devices').select('id,name,device_type,created_at,device_agents(last_seen_at,enabled)').in('id',ids).order('created_at',{ascending:false});if(error)throw error;
+  const {data:members,error:memberError}=await supabaseAdmin.from('device_access').select('device_id').in('device_id',ids);if(memberError)throw memberError;
+  const counts=new Map();for(const row of members||[])counts.set(row.device_id,(counts.get(row.device_id)||0)+1);
+  const now=Date.now();return res.json({ok:true,devices:(devices||[]).map(d=>{const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents,seen=agent?.last_seen_at||null;return{id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now),authorizedAccounts:counts.get(d.id)||1,maxAuthorizedAccounts:10};})});
+ }catch(_){return res.status(503).json({ok:false,error:'Could not load devices. Check that migration 007 has been applied.'});}
 });
-// Owner-scoped device management. Device IDs are never accepted without an authenticated owner check.
+// Members can remove their own access; only the original owner can rename or revoke the whole computer.
 app.patch('/api/devices/:deviceId', rateLimit(20,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user=await requireOwner(req,res);
@@ -884,21 +890,16 @@ app.patch('/api/devices/:deviceId', rateLimit(20,10*60*1000), async (req,res)=>{
     return res.json({ok:true,device:{id:data.id,name:data.name}});
   }catch(_){return res.status(503).json({ok:false,error:'Could not rename this device.'});}
 });
-app.delete('/api/devices/:deviceId', rateLimit(10,10*60*1000), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  const user=await requireOwner(req,res);
-  if(!user)return;
-  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
-  const deviceId=req.params.deviceId;
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a valid device.'});
-  try{
-    const {data,error}=await supabaseAdmin.from('devices').delete().eq('id',deviceId).eq('user_id',user.id).select('id').maybeSingle();
-    if(error)throw error;
-    if(!data)return res.status(404).json({ok:false,error:'That device was not found in your account.'});
-    return res.json({ok:true,revoked:true});
-  }catch(_){return res.status(503).json({ok:false,error:'Could not revoke this device.'});}
+app.delete('/api/devices/:deviceId',rateLimit(10,10*60*1000),async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');const user=await requireOwner(req,res);if(!user)return;
+ if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
+ const deviceId=req.params.deviceId;if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a valid device.'});
+ try{
+  const {data:device,error:lookupError}=await supabaseAdmin.from('devices').select('id,user_id').eq('id',deviceId).maybeSingle();if(lookupError)throw lookupError;if(!device)return res.status(404).json({ok:false,error:'That device was not found.'});
+  if(device.user_id===user.id){const {data,error}=await supabaseAdmin.from('devices').delete().eq('id',deviceId).eq('user_id',user.id).select('id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer was not found in your account.'});return res.json({ok:true,revoked:true,scope:'all_accounts'});}
+  const {data,error}=await supabaseAdmin.from('device_access').delete().eq('device_id',deviceId).eq('user_id',user.id).select('device_id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});return res.json({ok:true,revoked:true,scope:'this_account'});
+ }catch(_){return res.status(503).json({ok:false,error:'Could not revoke this computer access.'});}
 });
-
 // Owner creates a short-lived six-digit pairing code. Only its hash is stored.
 app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
@@ -925,7 +926,7 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
 });
 
 // The computer connector creates a short-lived ticket. The signed-in phone approves it.
-app.post('/api/enrollments/approve', rateLimit(8,10*60*1000), async (req,res)=>{
+app.post('/api/enrollments/approve', rateLimit(20,10*60*1000), async (req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user=await requireOwner(req,res); if(!user)return;
   if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Pairing service is not configured.'});
@@ -933,11 +934,11 @@ app.post('/api/enrollments/approve', rateLimit(8,10*60*1000), async (req,res)=>{
   if(!/^\d{6}$/.test(code))return res.status(400).json({ok:false,error:'Enter the six-digit code shown on your computer.'});
   try{
     const codeHash=hashEnrollmentCode(code,serviceKey);
-    const {data:ticket,error}=await supabaseAdmin.from('device_enrollments').select('id').eq('user_id',user.id).eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
+    const {data:ticket,error}=await supabaseAdmin.from('device_enrollments').select('id').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
     if(error)throw error;
     if(!ticket)return res.status(404).json({ok:false,error:'That code is invalid or has expired.'});
     const now=new Date().toISOString();
-    const {data:approved,error:approveError}=await supabaseAdmin.from('device_enrollments').update({approved_at:now}).eq('id',ticket.id).eq('user_id',user.id).is('approved_at',null).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
+    const {data:approved,error:approveError}=await supabaseAdmin.from('device_enrollments').update({approved_at:now,user_id:user.id}).eq('id',ticket.id).is('approved_at',null).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
     if(approveError)throw approveError;
     if(!approved)return res.status(409).json({ok:false,error:'This code was already approved or expired.'});
     return res.json({ok:true,approved:true});
@@ -987,8 +988,8 @@ async function recordAgentHeartbeat(req,res) {
     return res.status(503).json({ok:false,error:'Could not update computer status.'});
   }
 }
-installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope});
-installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit});
+installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope,getAccessibleDeviceIds});
+installWebRtcSignalRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,getAccessibleDeviceIds});
 app.post('/api/agent/heartbeat', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
 // Compatibility route for already-installed Agents; it now only updates status.
 app.post('/api/agent/commands/claim', rateLimit(300,60*1000), rateLimit(60,60*1000,agentRateScope), recordAgentHeartbeat);
@@ -999,74 +1000,43 @@ app.post('/api/agent/commands/:commandId/result', rateLimit(300,60*1000), rateLi
 });
 
 // Windows agent redeems a one-time pairing code for a long-lived per-device bearer token.
-app.post('/api/agent/enroll', rateLimit(5,10*60*1000), async (req,res)=>{
-  res.setHeader('Cache-Control','no-store');
-  if (!supabaseAdmin) return res.status(503).json({ ok:false, error:'Device enrollment service is not configured.' });
-  const code = typeof req.body?.enrollmentCode === 'string' ? req.body.enrollmentCode : '';
-  const isPairingCode=/^\d{6}$/.test(code);
-  if (!isPairingCode && !/^[A-Za-z0-9_-]{40,50}$/.test(code)) return res.status(400).json({ ok:false, error:'Enter the six-digit pairing code shown in PhoneBridge.' });
-  const codeHash = hashEnrollmentCode(code,serviceKey);
-  const previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:'';
-  const requestedDeviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
-  if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
-  if(requestedDeviceName.length>80)return res.status(400).json({ok:false,error:'Computer name must be 80 characters or fewer.'});
-  try {
-    let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
-    if(findError)throw findError;
-    // Accept six-digit codes issued by the immediately previous release while a
-    // rolling deployment is in progress; all newly issued codes use keyed HMAC.
-    if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
-    if (!ticket) return res.status(401).json({ ok:false, error:'Invalid or expired pairing code.' });
-    if (!ticket.approved_at) return res.status(403).json({ok:false,error:'Open PhoneBridge on your phone and approve this computer first.'});
-    const deviceName=requestedDeviceName||ticket.device_name;
-    const now = new Date().toISOString();
-    const { data:claimed, error:claimError } = await supabaseAdmin.from('device_enrollments').update({ consumed_at:now }).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
-    if (claimError || !claimed) return res.status(409).json({ ok:false, error:'Pairing code has already been used or expired.' });
-    const previousAgentToken=typeof req.body?.previousAgentToken==='string'&&/^[A-Za-z0-9_-]{40,50}$/.test(req.body.previousAgentToken)?req.body.previousAgentToken:'';
-    let agentToken='';
-    let deviceId='';
-    let reusedCredential=false;
-    if(previousDeviceId){
-      const {data:existing,error:lookupError}=await supabaseAdmin.from('devices').select('id').eq('id',previousDeviceId).eq('user_id',ticket.user_id).maybeSingle();
-      if(lookupError)throw lookupError;
-      if(existing){
-        deviceId=existing.id;
-        const {error:updateDeviceError}=await supabaseAdmin.from('devices').update({name:deviceName,device_type:'windows_agent'}).eq('id',deviceId).eq('user_id',ticket.user_id);
-        if(updateDeviceError)throw updateDeviceError;
-        const {data:currentAgent,error:agentLookupError}=await supabaseAdmin.from('device_agents').select('token_hash,enabled').eq('device_id',deviceId).maybeSingle();
-        if(agentLookupError)throw agentLookupError;
-        const suppliedHash=previousAgentToken?crypto.createHash('sha256').update(previousAgentToken).digest('hex'):'';
-        if(currentAgent?.enabled===true&&suppliedHash&&currentAgent.token_hash===suppliedHash){
-          agentToken=previousAgentToken;
-          reusedCredential=true;
-          const {error:touchError}=await supabaseAdmin.from('device_agents').update({last_seen_at:new Date().toISOString()}).eq('device_id',deviceId).eq('token_hash',suppliedHash).eq('enabled',true);
-          if(touchError)throw touchError;
-        }else{
-          agentToken=crypto.randomBytes(32).toString('base64url');
-          const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
-          if(currentAgent){
-            const {error:rotateError}=await supabaseAdmin.from('device_agents').update({token_hash:tokenHash,enabled:true,last_seen_at:null}).eq('device_id',deviceId);
-            if(rotateError)throw rotateError;
-          }else{
-            const {error:insertAgentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
-            if(insertAgentError)throw insertAgentError;
-          }
-        }
-      }
-    }
-    if(!deviceId){
-      agentToken=crypto.randomBytes(32).toString('base64url');
-      const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
-      const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:deviceName,device_type:'windows_agent'}).select('id').single();
-      if(deviceError||!device)throw deviceError||new Error('Device record was not created.');
-      deviceId=device.id;
-      const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});
-      if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
-    }
-    return res.status(201).json({ ok:true, deviceId, deviceName, agentToken, reusedCredential });
-  } catch (_) {
-    return res.status(503).json({ ok:false, error:'Device enrollment could not be completed.' });
+app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
+ res.setHeader('Cache-Control','no-store');if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device enrollment service is not configured.'});
+ const code=typeof req.body?.enrollmentCode==='string'?req.body.enrollmentCode:'',isPairingCode=/^\d{6}$/.test(code);
+ if(!isPairingCode&&!/^[A-Za-z0-9_-]{40,50}$/.test(code))return res.status(400).json({ok:false,error:'Enter the six-digit pairing code shown in PhoneBridge.'});
+ const codeHash=hashEnrollmentCode(code,serviceKey),previousDeviceId=typeof req.body?.previousDeviceId==='string'?req.body.previousDeviceId:'',previousAgentToken=typeof req.body?.previousAgentToken==='string'&&/^[A-Za-z0-9_-]{40,50}$/.test(req.body.previousAgentToken)?req.body.previousAgentToken:'',requestedDeviceName=typeof req.body?.deviceName==='string'?req.body.deviceName.trim():'';
+ if(previousDeviceId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previousDeviceId))return res.status(400).json({ok:false,error:'Saved device identity is invalid.'});
+ if(requestedDeviceName.length>80)return res.status(400).json({ok:false,error:'Computer name must be 80 characters or fewer.'});
+ try{
+  let {data:ticket,error:findError}=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',codeHash).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(findError)throw findError;
+  if(!ticket&&isPairingCode){const legacy=await supabaseAdmin.from('device_enrollments').select('id,user_id,device_name,expires_at,consumed_at,approved_at').eq('code_hash',hashLegacyPairingCode(code)).is('consumed_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();if(legacy.error)throw legacy.error;ticket=legacy.data;}
+  if(!ticket)return res.status(401).json({ok:false,error:'Invalid or expired pairing code.'});
+  if(!ticket.approved_at)return res.status(403).json({ok:false,error:'Open PhoneBridge on your phone and approve this computer first.'});
+  let existingDevice=null,agentToken='',deviceId='',reusedCredential=false;
+  if(previousDeviceId){
+   const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,user_id,name').eq('id',previousDeviceId).maybeSingle();if(deviceError)throw deviceError;
+   const suppliedHash=previousAgentToken?crypto.createHash('sha256').update(previousAgentToken).digest('hex'):'';
+   const {data:agent,error:agentError}=await supabaseAdmin.from('device_agents').select('token_hash,enabled').eq('device_id',previousDeviceId).maybeSingle();if(agentError)throw agentError;
+   if(!device||!agent?.enabled||!suppliedHash||agent.token_hash!==suppliedHash)return res.status(403).json({ok:false,error:'This computer identity could not be verified. Re-pair the original owner account first.'});
+   const {data:members,error:membersError}=await supabaseAdmin.from('device_access').select('user_id').eq('device_id',previousDeviceId);if(membersError)throw membersError;
+   const isMember=device.user_id===ticket.user_id||(members||[]).some(row=>row.user_id===ticket.user_id);
+   if(!isMember&&(members||[]).length>=10)return res.status(409).json({ok:false,error:'This ThinkPad has reached its limit of 10 authorized PhoneBridge accounts.'});
+   existingDevice=device;deviceId=device.id;agentToken=previousAgentToken;reusedCredential=true;
   }
+  const now=new Date().toISOString();
+  const {data:claimed,error:claimError}=await supabaseAdmin.from('device_enrollments').update({consumed_at:now}).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();if(claimError)throw claimError;if(!claimed)return res.status(409).json({ok:false,error:'Pairing code has already been used or expired.'});
+  if(existingDevice){
+   const {error:accessError}=await supabaseAdmin.from('device_access').upsert({device_id:deviceId,user_id:ticket.user_id,role:existingDevice.user_id===ticket.user_id?'owner':'member'},{onConflict:'device_id,user_id',ignoreDuplicates:true});if(accessError)throw accessError;
+  }else{
+   const {data:owned,error:ownedError}=await supabaseAdmin.from('devices').select('id').eq('user_id',ticket.user_id).limit(1);if(ownedError)throw ownedError;
+   if(owned?.length)return res.status(409).json({ok:false,error:'This account already has a paired computer. Use its existing computer pairing flow.'});
+   agentToken=crypto.randomBytes(32).toString('base64url');const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
+   const {data:device,error:deviceError}=await supabaseAdmin.from('devices').insert({user_id:ticket.user_id,name:requestedDeviceName||ticket.device_name,device_type:'windows_agent'}).select('id,user_id').single();if(deviceError||!device)throw deviceError||new Error('Device record was not created.');deviceId=device.id;
+   const {error:agentError}=await supabaseAdmin.from('device_agents').insert({device_id:deviceId,token_hash:tokenHash,enabled:true});if(agentError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw agentError;}
+   const {error:accessError}=await supabaseAdmin.from('device_access').insert({device_id:deviceId,user_id:ticket.user_id,role:'owner'});if(accessError){await supabaseAdmin.from('devices').delete().eq('id',deviceId);throw accessError;}
+  }
+  return res.status(201).json({ok:true,deviceId,deviceName:existingDevice?.name||requestedDeviceName||ticket.device_name,agentToken,reusedCredential});
+ }catch(error){console.error('[PhoneBridge multi-account enrollment]',error?.message||'unknown error');return res.status(503).json({ok:false,error:'Device enrollment could not be completed. Check that migration 007 has been applied.'});}
 });
 
 // Unknown legacy/local APIs must not fall through to the SPA and look successful.

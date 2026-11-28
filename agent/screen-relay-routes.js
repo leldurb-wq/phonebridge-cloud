@@ -1,6 +1,6 @@
 'use strict';
 
-function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope}) {
+function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLimit,agentRateScope,getAccessibleDeviceIds}) {
   const frames=new Map();
   global.__pbScreenFrames=frames;
   const tickets=new Map();
@@ -28,8 +28,8 @@ function installScreenRelayRoutes({app,crypto,supabaseAdmin,requireOwner,rateLim
   app.post('/api/screen/ticket',rateLimit(30,60000),async(req,res)=>{
     res.setHeader('Cache-Control','no-store');const user=await requireOwner(req,res);if(!user)return;
     try{
-      const {data,error}=await supabaseAdmin.from('devices').select('id').eq('user_id',user.id);if(error)throw error;
-      const candidates=(data||[]).map(d=>({deviceId:d.id,frame:frames.get(d.id)})).filter(item=>item.frame&&Date.now()-item.frame.at<5000).sort((a,b)=>b.frame.at-a.frame.at); if(!candidates.length)return res.status(409).json({ok:false,error:'No live frames from the paired ThinkPad. Start the PhoneBridge Windows connector in your signed-in desktop session.'}); const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:candidates[0].deviceId,expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
+      const ids=await getAccessibleDeviceIds(user.id);
+      const candidates=ids.map(id=>({deviceId:id,frame:frames.get(id)})).filter(item=>item.frame&&Date.now()-item.frame.at<5000).sort((a,b)=>b.frame.at-a.frame.at); if(!candidates.length)return res.status(409).json({ok:false,error:'No live frames from the paired ThinkPad. Start the PhoneBridge Windows connector in your signed-in desktop session.'}); const ticket=crypto.randomBytes(32).toString('base64url');tickets.set(ticket,{userId:user.id,deviceId:candidates[0].deviceId,expiresAt:Date.now()+120000});return res.json({ok:true,ticket});
     }catch(_){return res.status(503).json({ok:false,error:'Could not open the private screen session.'});}
   });
   app.get('/api/screen/frame',rateLimit(900,60000),(req,res)=>{

@@ -159,7 +159,7 @@ test('pairing redemption rejects expired or already-consumed tickets and binds e
  const enrollment=server.slice(server.indexOf("app.post('/api/agent/enroll'"));
  assert.match(enrollment,/\.is\('consumed_at',null\)\.gt\('expires_at',new Date\(\)\.toISOString\(\)\)/);
  assert.match(enrollment,/\.eq\('id',ticket\.id\)\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);
- assert.match(enrollment,/\.eq\('id',previousDeviceId\)\.eq\('user_id',ticket\.user_id\)/);
+ assert.match(enrollment,/\.eq\('id',previousDeviceId\)/);assert.match(enrollment,/agent\.token_hash!==suppliedHash/);assert.match(enrollment,/device_access/);assert.match(enrollment,/length>=10/);
  assert.match(enrollment,/user_id:ticket\.user_id/);
 });
 
@@ -213,9 +213,9 @@ test('computer-initiated pairing requires approval from the signed-in phone befo
  const approval=server.slice(server.indexOf("app.post('/api/enrollments/approve'"),server.indexOf("app.post('/api/agent/enrollment-status'"));
  const status=server.slice(server.indexOf("app.post('/api/agent/enrollment-status'"),server.indexOf("// Task execution"));
  const redeem=server.slice(server.indexOf("app.post('/api/agent/enroll'"),server.indexOf("app.use('/api'"));
- assert.match(approval,/requireOwner\(req,res\)/);assert.match(approval,/approved_at:now/);assert.match(approval,/eq\('user_id',user.id\)/);assert.match(approval,/hashEnrollmentCode\(code,serviceKey\)/);
+ assert.match(approval,/requireOwner\(req,res\)/);assert.match(approval,/approved_at:now/);assert.match(approval,/update\(\{approved_at:now,user_id:user.id\}\)/);assert.match(approval,/hashEnrollmentCode\(code,serviceKey\)/);
  assert.match(status,/status:ticket.approved_at\?'approved':'waiting'/);
- assert.match(redeem,/if \(!ticket.approved_at\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)/);
+ assert.match(redeem,/if\(!ticket.approved_at\)/);assert.match(redeem,/update\(\{consumed_at:now\}\)/);
  const worker=fs.readFileSync(path.join(root,'agent/cloud-worker.js'),'utf8');
  assert.match(worker,/createLocalPairingBridge/);assert.match(worker,/enrollment-status/);assert.match(worker,/postJson\('\/api\/agent\/enroll'/);const local=fs.readFileSync(path.join(root,'agent/local-pairing-bridge.js'),'utf8');assert.match(local,/pairing\/start/);assert.match(local,/127\.0\.0\.1/);
  assert.doesNotMatch(worker,/readline|process\.argv\.includes|Enter the six-digit code shown in PhoneBridge on your phone/);
@@ -240,7 +240,7 @@ test('PhoneBridge transfers work in both directions with authenticated phone des
  assert.match(server,/PC_TRANSFER_CHUNK=8\*1024\*1024/);assert.match(server,/PC_TRANSFER_MAX=2\*1024\*1024\*1024/);assert.match(server,/requireOwner\(req,res\)/);assert.match(server,/requireAgent\(req,res/);assert.match(server,/X-Chunk-SHA256/);assert.match(server,/Date\.now\(\)-2\*60\*1000/);assert.match(server,/\['completed','failed','queued'\]/);assert.match(server,/touchError/);
  assert.match(page,/id="pcDeviceSelect"/);assert.match(page,/id="pcFileInput"/);assert.match(page,/crypto\.subtle\.digest/);assert.match(page,/X-Chunk-SHA256/);assert.match(page,/2 GB per file/);
  assert.match(worker,/receiveTransfer/);assert.match(worker,/resolveDocumentsDirectory\(\),'PhoneBridge','Incoming'/);assert.match(worker,/Environment\+SpecialFolder\]::MyDocuments/);assert.match(worker,/api\/agent\/transfers\/claim/);
- assert.match(receiver,/createWriteStream|writeSync/);assert.match(receiver,/createHash\('sha256'\)/);assert.match(receiver,/fs\.renameSync/);assert.match(receiver,/existing\.size===size/);assert.match(receiver,/firstChunk/);assert.match(receiver,/Promise\.allSettled/);assert.match(receiver,/batchStart\+=3/);assert.match(server,/app\.post\('\/api\/transfer-clients\/register'/);assert.match(server,/app\.get\('\/api\/transfer-clients'/);assert.match(server,/app\.get\('\/api\/transfers\/inbox'/);assert.match(server,/app\.post\('\/api\/transfers\/:transferId\/receive'/);assert.match(server,/direction==='pc_to_phone'/);assert.match(server,/target_client_id/);assert.match(page,/Choose the current phone/);assert.match(page,/Send files to your phone/);assert.match(page,/pollPhoneInbox/);assert.match(page,/transferHistory/);assert.match(page,/Array\.from\(\{length:1\},worker\)/);assert.match(page,/function uploadTransferChunk\(/);assert.match(page,/xhr\.open\('PUT'/);assert.match(page,/xhr\.timeout=120000/);assert.match(page,/attempt<5/);assert.match(page,/750\*Math\.pow\(2,attempt\)/);assert.match(server,/ensureTransferInDrive\(user\.id,transfer\)/);assert.match(server,/ensureTransferInDrive\(agent\.userId,data\)/);assert.match(server,/TRANSFER_DRIVE_PREFIX='phonebridge-transfer:'/);assert.match(server,/phone_transfer_chunks[\s\S]*?X-Chunk-SHA256/);assert.match(server,/Completed transfer chunks back Drive entries/);
+ assert.match(receiver,/createWriteStream|writeSync/);assert.match(receiver,/createHash\('sha256'\)/);assert.match(receiver,/fs\.renameSync/);assert.match(receiver,/existing\.size===size/);assert.match(receiver,/firstChunk/);assert.match(receiver,/Promise\.allSettled/);assert.match(receiver,/batchStart\+=3/);assert.match(server,/app\.post\('\/api\/transfer-clients\/register'/);assert.match(server,/app\.get\('\/api\/transfer-clients'/);assert.match(server,/app\.get\('\/api\/transfers\/inbox'/);assert.match(server,/app\.post\('\/api\/transfers\/:transferId\/receive'/);assert.match(server,/direction==='pc_to_phone'/);assert.match(server,/target_client_id/);assert.match(page,/Choose the current phone/);assert.match(page,/Send files to your phone/);assert.match(page,/pollPhoneInbox/);assert.match(page,/transferHistory/);assert.match(page,/Array\.from\(\{length:1\},worker\)/);assert.match(page,/function uploadTransferChunk\(/);assert.match(page,/xhr\.open\('PUT'/);assert.match(page,/xhr\.timeout=120000/);assert.match(page,/attempt<5/);assert.match(page,/750\*Math\.pow\(2,attempt\)/);assert.match(server,/ensureTransferInDrive\(user\.id,transfer\)/);assert.match(server,/ensureTransferInDrive\(data\.user_id,data\)/);assert.match(server,/ensureTransferInDrive\(existing\.user_id,existing\)/);assert.match(server,/TRANSFER_DRIVE_PREFIX='phonebridge-transfer:'/);assert.match(server,/phone_transfer_chunks[\s\S]*?X-Chunk-SHA256/);assert.match(server,/Completed transfer chunks back Drive entries/);
  assert.doesNotMatch(worker,/readline|executeCommand|workspace-tasks|process\.exec\(/);
 });
 
@@ -289,9 +289,9 @@ test('downloadable Windows Agent archive contains its launcher and every current
 
 test('pairing and command relay use reviewed migrations in order and service-role-only RPC grants',()=>{
  const dir=path.join(root,'supabase/migrations');const files=fs.readdirSync(dir).filter(name=>name.endsWith('.sql')).sort();
- assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql']);
- const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');const transfers=fs.readFileSync(path.join(dir,files[4]),'utf8');const bidirectional=fs.readFileSync(path.join(dir,files[5]),'utf8');
- assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);
+ assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql','007_multi_account_device_access.sql']);
+ const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');const transfers=fs.readFileSync(path.join(dir,files[4]),'utf8');const bidirectional=fs.readFileSync(path.join(dir,files[5]),'utf8');const sharedAccess=fs.readFileSync(path.join(dir,files[6]),'utf8');
+ assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);assert.match(sharedAccess,/create table if not exists public\.device_access/);assert.match(sharedAccess,/grant all on public\.device_access to service_role/);
  assert.match(relay,/create table if not exists public\.device_agents/);assert.match(relay,/create table if not exists public\.device_enrollments/);assert.match(relay,/create table if not exists public\.device_commands/);assert.match(relay,/revoke all on public\.device_agents from anon, authenticated/);assert.match(relay,/device commands owner read/);
  assert.match(rpc,/create or replace function public\.phonebridge_claim_device_command/);assert.match(rpc,/create or replace function public\.phonebridge_complete_device_command/);assert.match(rpc,/grant execute on function public\.phonebridge_claim_device_command\(uuid, text\) to service_role/);assert.match(rpc,/grant execute on function public\.phonebridge_complete_device_command\([\s\S]*?to service_role/);assert.match(pairing,/add column if not exists approved_at timestamptz/);assert.ok(transfers.includes('create table if not exists public.phone_transfers'));assert.ok(transfers.includes('create table if not exists public.phone_transfer_chunks'));assert.ok(transfers.includes('transfer-chunks'));assert.ok(transfers.includes('grant all on public.phone_transfers, public.phone_transfer_chunks to service_role'));assert.match(bidirectional,/add column if not exists direction text not null default 'phone_to_pc'/);assert.match(bidirectional,/create table if not exists public.phone_transfer_clients/);assert.match(bidirectional,/primary key \(user_id,id\)/);assert.match(bidirectional,/grant all on public.phone_transfer_clients to service_role/);
  const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');assert.match(readme,/002_device_command_relay\.sql/);assert.match(readme,/003_device_relay_functions\.sql/);assert.match(readme,/computer-generated pairing code/i);assert.match(readme,/Render does not (run migrations automatically|apply database migrations)/);
@@ -306,7 +306,7 @@ test('pairing codes are created only for the bearer account, expire in five minu
 
 test('device enrollment records the ticket owner and consumes an unexpired ticket with a compare-and-set update',()=>{
  const server=fs.readFileSync(path.join(root,'server.js'),'utf8');const redeem=server.slice(server.indexOf("app.post('/api/agent/enroll'"),server.indexOf("app.use('/api'"));
- assert.match(redeem,/\.is\('consumed_at',null\)\.gt\('expires_at',new Date\(\)\.toISOString\(\)\)/);assert.match(redeem,/update\(\{ consumed_at:now \}\)\.eq\('id',ticket\.id\)\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);assert.match(redeem,/user_id:ticket\.user_id/);
+ assert.match(redeem,/\.is\('consumed_at',null\)\.gt\('expires_at',new Date\(\)\.toISOString\(\)\)/);assert.match(redeem,/update\(\{consumed_at:now\}\)\.eq\('id',ticket\.id\)\.is\('consumed_at',null\)\.gt\('expires_at',now\)/);assert.match(redeem,/user_id:ticket\.user_id/);
 });
 
 test('Drive media previews use short-lived authenticated streaming sessions and browser-ready transcoding',()=>{
@@ -381,4 +381,27 @@ test('live screen relay authenticates paired Windows frames and serves owner-sco
  const capture=fs.readFileSync(path.join(root,'agent/screen-capture.js'),'utf8');
  assert.match(server,/installScreenRelayRoutes/);assert.match(routes,/device_agents[\s\S]*?token_hash[\s\S]*?enabled/);assert.match(routes,/requireOwner\(req,res\)/);assert.match(routes,/api\/screen\/frame/);assert.match(routes,/X-PB-Frame-At/);assert.match(routes,/Content-Type','image\/jpeg/);
 assert.match(worker,/startScreenCaptureStream/);assert.match(worker,/frameRate:10/);assert.match(worker,/api\/agent\/screen\/frame/);assert.match(capture,/gdigrab/);assert.match(capture,/image2pipe/);assert.match(capture,/Math.min\(10/);assert.match(capture,/spawn\(ffmpegPath/);assert.match(routes,/authCache/);assert.match(routes,/rateLimit\(900,60000/);assert.match(routes,/setInterval\(send,100\)/);assert.match(routes,/writableLength/);assert.match(routes,/tickets\.set\(ticket/);assert.match(page,/api\/screen\/stream\?ticket=/);assert.match(page,/receiveLiveScreenStream/);assert.match(page,/pathOnly===\x27\/api\/screen\/ticket\x27&&method===\x27POST\x27/);assert.match(page,/name===\x27computer\x27&&!screenRunning/);assert.match(page,/position:\x27fixed\x27/);
+});
+
+test('multi-account pairing grants up to ten accounts access to one verified ThinkPad identity',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ const approval=server.slice(server.indexOf("app.post('/api/enrollments/approve'"),server.indexOf("app.post('/api/agent/enrollment-status'"));
+ const redeem=server.slice(server.indexOf("app.post('/api/agent/enroll'"),server.indexOf("app.use('/api'"));
+ assert.match(approval,/update\(\{approved_at:now,user_id:user.id\}\)/);
+ assert.doesNotMatch(approval,/eq\('user_id',user.id\)/);
+ assert.match(redeem,/agent\.token_hash!==suppliedHash/);
+ assert.match(redeem,/device_access/);
+ assert.match(redeem,/length>=10/);
+ assert.match(redeem,/reusedCredential=true/);
+ assert.match(server,/async function getAccessibleDeviceIds/);
+ assert.match(server,/maxAuthorizedAccounts:10/);
+ const screen=fs.readFileSync(path.join(root,'agent/screen-relay-routes.js'),'utf8');
+ const rtc=fs.readFileSync(path.join(root,'agent/webrtc-signal-routes.js'),'utf8');
+ assert.match(screen,/getAccessibleDeviceIds\(user.id\)/);
+ assert.match(rtc,/getAccessibleDeviceIds\(user.id\)/);
+ const migration=fs.readFileSync(path.join(root,'supabase/migrations/007_multi_account_device_access.sql'),'utf8');
+ assert.match(migration,/create table if not exists public\.device_access/);
+ assert.match(migration,/before insert on public\.device_access/);
+ assert.match(migration,/>= 10/);
+ assert.match(migration,/revoke all on public\.device_access from anon, authenticated/);
 });
