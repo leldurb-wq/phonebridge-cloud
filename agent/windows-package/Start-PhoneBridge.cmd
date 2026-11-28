@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set "PHONEBRIDGE_CLOUD_URL=https://phonebridge-cloud.onrender.com"
+set "PHONEBRIDGE_CLOUD_URL=https://phonebridge.msbundle.store"
 where node.exe >nul 2>nul
 if errorlevel 1 (
   echo Node.js 20 or later is required. Install it from https://nodejs.org/
