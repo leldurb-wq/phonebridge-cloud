@@ -1060,19 +1060,24 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
   if(!ticket)return res.status(401).json({ok:false,error:'Invalid or expired pairing code.'});
   enrollmentTicketId=ticket.id;
   if(!ticket.approved_at)return res.status(403).json({ok:false,error:'Open PhoneBridge on your phone and approve this computer first.'});
-  let existingDevice=null,agentToken='',deviceId='',reusedCredential=false;
+  let existingDevice=null,agentToken='',deviceId='',reusedCredential=false,recoverOwnedDevice=null;
   if(previousDeviceId){
    const {data:device,error:deviceError}=await supabaseAdmin.from('devices').select('id,user_id,name').eq('id',previousDeviceId).maybeSingle();if(deviceError)throw deviceError;
    const suppliedHash=previousAgentToken?crypto.createHash('sha256').update(previousAgentToken).digest('hex'):'';
    const {data:agent,error:agentError}=await supabaseAdmin.from('device_agents').select('token_hash,enabled').eq('device_id',previousDeviceId).maybeSingle();if(agentError)throw agentError;
-   if(!device||!agent?.enabled||!suppliedHash||agent.token_hash!==suppliedHash)return res.status(403).json({ok:false,error:'This computer identity could not be verified. Re-pair the original owner account first.'});
-   const {data:members,error:membersError}=await supabaseAdmin.from('device_access').select('user_id').eq('device_id',previousDeviceId);if(membersError)throw membersError;
-   const isMember=device.user_id===ticket.user_id||(members||[]).some(row=>row.user_id===ticket.user_id);
-   if(!isMember&&(members||[]).length>=10)return res.status(409).json({ok:false,error:'This ThinkPad has reached its limit of 10 authorized PhoneBridge accounts.'});
-   existingDevice=device;deviceId=device.id;agentToken=previousAgentToken;reusedCredential=true;
+   if(device&&agent?.enabled&&suppliedHash&&agent.token_hash===suppliedHash){
+    const {data:members,error:membersError}=await supabaseAdmin.from('device_access').select('user_id').eq('device_id',previousDeviceId);if(membersError)throw membersError;
+    const isMember=device.user_id===ticket.user_id||(members||[]).some(row=>row.user_id===ticket.user_id);
+    if(!isMember&&(members||[]).length>=10)return res.status(409).json({ok:false,error:'This ThinkPad has reached its limit of 10 authorized PhoneBridge accounts.'});
+    existingDevice=device;deviceId=device.id;agentToken=previousAgentToken;reusedCredential=true;
+   }else if(device&&device.user_id===ticket.user_id){
+    // The signed-in owner has approved a fresh code from this computer. If its
+    // locally saved token is stale/revoked, rotate the token on the same device
+    // instead of permanently locking this installation out of re-pairing.
+    recoverOwnedDevice=device;
+   }
   }
-  let recoverOwnedDevice=null;
-  if(!existingDevice){
+  if(!existingDevice&&!recoverOwnedDevice){
    const {data:owned,error:ownedError}=await supabaseAdmin.from('devices').select('id,user_id,name').eq('user_id',ticket.user_id).limit(2);if(ownedError)throw ownedError;
    if(owned?.length){
     const sameComputer=owned.find(device=>String(device.name||'').toLowerCase()===String(requestedDeviceName||ticket.device_name||'').toLowerCase());
