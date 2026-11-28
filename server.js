@@ -1071,16 +1071,29 @@ app.post('/api/agent/enroll',rateLimit(20,10*60*1000),async(req,res)=>{
    if(!isMember&&(members||[]).length>=10)return res.status(409).json({ok:false,error:'This ThinkPad has reached its limit of 10 authorized PhoneBridge accounts.'});
    existingDevice=device;deviceId=device.id;agentToken=previousAgentToken;reusedCredential=true;
   }
+  let recoverOwnedDevice=null;
+  if(!existingDevice){
+   const {data:owned,error:ownedError}=await supabaseAdmin.from('devices').select('id,user_id,name').eq('user_id',ticket.user_id).limit(2);if(ownedError)throw ownedError;
+   if(owned?.length){
+    const sameComputer=owned.find(device=>String(device.name||'').toLowerCase()===String(requestedDeviceName||ticket.device_name||'').toLowerCase());
+    if(!sameComputer)return res.status(409).json({ok:false,error:'This account already has a different paired computer. Revoke that computer before pairing another one.'});
+    recoverOwnedDevice=sameComputer;
+   }
+  }
   const now=new Date().toISOString();
   const {data:claimed,error:claimError}=await supabaseAdmin.from('device_enrollments').update({consumed_at:now}).eq('id',ticket.id).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();if(claimError)throw claimError;if(!claimed)return res.status(409).json({ok:false,error:'Pairing code has already been used or expired.'});
-  if(existingDevice){
+  if(existingDevice||recoverOwnedDevice){
+   if(recoverOwnedDevice){
+    existingDevice=recoverOwnedDevice;deviceId=existingDevice.id;
+    agentToken=crypto.randomBytes(32).toString('base64url');
+    const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
+    const {error:agentError}=await supabaseAdmin.from('device_agents').upsert({device_id:deviceId,token_hash:tokenHash,enabled:true},{onConflict:'device_id'});if(agentError)throw agentError;
+   }
    const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
    const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent==null?null:Math.max(0,Math.min(100,Number(info.batteryPercent)||0)),batteryStatus:info.batteryStatus==null?null:Math.max(0,Math.min(255,Number(info.batteryStatus)||0)),brightness:info.brightness==null?null:Math.max(0,Math.min(100,Number(info.brightness)||0))};
    const {error:infoError}=await supabaseAdmin.from('devices').update({device_info:deviceInfo}).eq('id',deviceId);if(infoError)throw infoError;
    const {error:accessError}=await supabaseAdmin.from('device_access').upsert({device_id:deviceId,user_id:ticket.user_id,role:existingDevice.user_id===ticket.user_id?'owner':'member'},{onConflict:'device_id,user_id',ignoreDuplicates:true});if(accessError)throw accessError;
   }else{
-   const {data:owned,error:ownedError}=await supabaseAdmin.from('devices').select('id').eq('user_id',ticket.user_id).limit(1);if(ownedError)throw ownedError;
-   if(owned?.length)return res.status(409).json({ok:false,error:'This account already has a paired computer. Use its existing computer pairing flow.'});
    agentToken=crypto.randomBytes(32).toString('base64url');const tokenHash=crypto.createHash('sha256').update(agentToken).digest('hex');
    const info=req.body?.deviceInfo&&typeof req.body.deviceInfo==='object'&&!Array.isArray(req.body.deviceInfo)?req.body.deviceInfo:{};
    const deviceInfo={model:String(info.model||'').slice(0,120),os:String(info.os||'').slice(0,100),osVersion:String(info.osVersion||'').slice(0,40),processor:String(info.processor||'').slice(0,140),ramGb:Number.isFinite(Number(info.ramGb))?Math.max(0,Math.min(2048,Number(info.ramGb))):null,graphics:String(info.graphics||'').slice(0,140),batteryPercent:info.batteryPercent==null?null:Math.max(0,Math.min(100,Number(info.batteryPercent)||0)),batteryStatus:info.batteryStatus==null?null:Math.max(0,Math.min(255,Number(info.batteryStatus)||0)),brightness:info.brightness==null?null:Math.max(0,Math.min(100,Number(info.brightness)||0))};
