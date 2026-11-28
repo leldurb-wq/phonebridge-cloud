@@ -1,11 +1,29 @@
 'use strict';
 
+const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
-const ffmpegPath = require('ffmpeg-static');
+
+function resolveFfmpegPath() {
+  const candidates = [];
+  try { candidates.push(require('ffmpeg-static')); } catch (_) {}
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    try {
+      candidates.push(require(path.join(localAppData, 'PhoneBridge', 'Agent', 'runtime', 'node_modules', 'ffmpeg-static')));
+    } catch (_) {}
+  }
+  try { candidates.push(require(path.join(__dirname, 'node_modules', 'ffmpeg-static'))); } catch (_) {}
+  const resolved = candidates.find(value => typeof value === 'string' && value.trim());
+  if (!resolved) {
+    throw new Error('PhoneBridge cannot find FFmpeg. Start the connector with Start-PhoneBridge.cmd so it can install the FFmpeg runtime automatically.');
+  }
+  return resolved;
+}
+
+const ffmpegPath = resolveFfmpegPath();
 
 function captureScreenJpeg() {
   if(process.platform!=='win32')throw new Error('Live desktop capture currently requires the Windows connector.');
-  if(!ffmpegPath)throw new Error('FFmpeg screen capture is not installed with this PhoneBridge connector.');
   const frame=execFileSync(ffmpegPath,[
     '-hide_banner','-loglevel','error','-f','gdigrab','-framerate','1','-i','desktop',
     '-frames:v','1','-vf','scale=1024:576:force_original_aspect_ratio=decrease:flags=fast_bilinear',
@@ -22,7 +40,6 @@ function captureScreenJpeg() {
  */
 function startScreenCaptureStream({onFrame,onError,frameRate=8}={}) {
   if(process.platform!=='win32')throw new Error('Live desktop capture currently requires the Windows connector.');
-  if(!ffmpegPath)throw new Error('FFmpeg screen capture is not installed with this PhoneBridge connector.');
   let child=null,stopped=false,restartTimer=null,buffer=Buffer.alloc(0),stderr='';
   const fps=Math.max(1,Math.min(10,Math.floor(Number(frameRate)||10)));
   function report(error){try{onError?.(error)}catch{}}
