@@ -10,6 +10,7 @@ const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const { serveChunkedFile } = require('./lib/chunked-range');
+const { installWorkspaceRoutes } = require('./lib/workspace-routes');
 const { createChunkCache } = require('./lib/chunk-cache');
 const { classifyMedia, directPlayCandidate, mediaContentType } = require('./lib/media-formats');
 const transferChunkCache = createChunkCache({ maxBytes: 32 * 1024 * 1024 });
@@ -298,6 +299,8 @@ async function getUserStorageUsage(userId){
   }
   return total;
 }
+const {recordSecurityEvent}=installWorkspaceRoutes({app,requireOwner,supabaseAdmin,rateLimit,FILE_BUCKET,FILE_LIMIT,ACCOUNT_STORAGE_LIMIT,cleanFileName,readUpload,getUserStorageUsage});
+
 app.get('/api/files',rateLimit(60,60*1000),async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const user=await requireOwner(req,res);if(!user)return;
@@ -306,7 +309,9 @@ app.get('/api/files',rateLimit(60,60*1000),async(req,res)=>{
     const {data,error}=await supabaseAdmin.from('user_files').select('id,original_name,mime_type,size_bytes,folder,is_favorite,created_at,updated_at').eq('user_id',user.id).order('updated_at',{ascending:false}).limit(2000);
     if(error)throw error;
     const files=(data||[]).map(f=>({id:f.id,name:f.original_name,size:Number(f.size_bytes||0),type:f.mime_type||'application/octet-stream',folder:f.folder||'',favorite:!!f.is_favorite,modified:Date.parse(f.updated_at||f.created_at)}));
-    const folders=[...new Set(files.map(f=>f.folder).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const {data:savedFolders,error:folderError}=await supabaseAdmin.from('drive_folders').select('name').eq('user_id',user.id).order('name');
+    if(folderError)throw folderError;
+    const folders=[...new Set([...files.map(f=>f.folder).filter(Boolean),...(savedFolders||[]).map(f=>f.name)])].sort((a,b)=>a.localeCompare(b));
     const used=await getUserStorageUsage(user.id);
     return res.json({ok:true,files,folders,storage:{used,limit:ACCOUNT_STORAGE_LIMIT}});
   }catch(_){return res.status(503).json({ok:false,error:'Could not load your files from private cloud storage.'});}
@@ -331,6 +336,7 @@ app.post('/api/upload',rateLimit(30,10*60*1000),async(req,res)=>{
     const now=new Date().toISOString();
     const {data,error}=await supabaseAdmin.from('user_files').insert({id,user_id:user.id,object_path:objectPath,original_name:name,mime_type:type,size_bytes:buffer.length,folder:'',created_at:now,updated_at:now}).select('id').single();
     if(error){await supabaseAdmin.storage.from(FILE_BUCKET).remove([objectPath]);throw error}
+    await recordSecurityEvent(user.id,'file_uploaded',name);
     return res.status(201).json({ok:true,id:data.id,name,size:buffer.length});
   }catch(error){
     if(error.status)return res.status(error.status).json({ok:false,error:error.message});
@@ -519,6 +525,7 @@ app.patch('/api/files',rateLimit(60,60*1000),async(req,res)=>{
     const {data,error}=await supabaseAdmin.from('user_files').update(changes).eq('id',id).eq('user_id',user.id).select('id').maybeSingle();
     if(error)throw error;
     if(!data)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
+    if(typeof changes.folder==='string'&&changes.folder){const {error:folderError}=await supabaseAdmin.from('drive_folders').upsert({user_id:user.id,name:changes.folder},{onConflict:'user_id,name',ignoreDuplicates:true});if(folderError)throw folderError;}
     return res.json({ok:true});
   }catch(_){return res.status(503).json({ok:false,error:'Could not update this file.'});}
 });
@@ -529,7 +536,7 @@ app.delete('/api/files',rateLimit(20,10*60*1000),async(req,res)=>{
   const id=String(req.query.id||'');
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return res.status(400).json({ok:false,error:'Choose a valid file.'});
   try{
-    const {data:file,error:findError}=await supabaseAdmin.from('user_files').select('object_path').eq('id',id).eq('user_id',user.id).maybeSingle();
+    const {data:file,error:findError}=await supabaseAdmin.from('user_files').select('object_path,original_name').eq('id',id).eq('user_id',user.id).maybeSingle();
     if(findError)throw findError;
     if(!file)return res.status(404).json({ok:false,error:'That file was not found in your account.'});
     if(file.object_path.startsWith(TRANSFER_DRIVE_PREFIX)){
@@ -548,6 +555,7 @@ app.delete('/api/files',rateLimit(20,10*60*1000),async(req,res)=>{
     }
     const {error:deleteError}=await supabaseAdmin.from('user_files').delete().eq('id',id).eq('user_id',user.id);
     if(deleteError)throw deleteError;
+    await recordSecurityEvent(user.id,'file_deleted',file.original_name);
     return res.json({ok:true,deleted:true});
   }catch(_){return res.status(503).json({ok:false,error:'Could not delete this file from private storage.'});}
 });
@@ -867,10 +875,10 @@ app.get('/api/devices',rateLimit(60,60*1000),async(req,res)=>{
  if(!supabaseAdmin)return res.status(503).json({ok:false,error:'Device service is not configured.'});
  try{
   const ids=await getAccessibleDeviceIds(user.id);if(!ids.length)return res.json({ok:true,devices:[]});
-  const {data:devices,error}=await supabaseAdmin.from('devices').select('id,name,device_type,created_at,device_agents(last_seen_at,enabled)').in('id',ids).order('created_at',{ascending:false});if(error)throw error;
+  const {data:devices,error}=await supabaseAdmin.from('devices').select('id,user_id,name,device_type,created_at,device_agents(last_seen_at,enabled)').in('id',ids).order('created_at',{ascending:false});if(error)throw error;
   const {data:members,error:memberError}=await supabaseAdmin.from('device_access').select('device_id').in('device_id',ids);if(memberError)throw memberError;
   const counts=new Map();for(const row of members||[])counts.set(row.device_id,(counts.get(row.device_id)||0)+1);
-  const now=Date.now();return res.json({ok:true,devices:(devices||[]).map(d=>{const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents,seen=agent?.last_seen_at||null;return{id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now),authorizedAccounts:counts.get(d.id)||1,maxAuthorizedAccounts:10};})});
+  const now=Date.now();return res.json({ok:true,devices:(devices||[]).map(d=>{const agent=Array.isArray(d.device_agents)?d.device_agents[0]:d.device_agents,seen=agent?.last_seen_at||null;return{id:d.id,name:d.name,deviceType:d.device_type,createdAt:d.created_at,lastSeenAt:seen,connected:isDeviceOnline(agent?.enabled,seen,now),isOwner:d.user_id===user.id,authorizedAccounts:counts.get(d.id)||1,maxAuthorizedAccounts:10};})});
  }catch(_){return res.status(503).json({ok:false,error:'Could not load devices. Check that migration 007 has been applied.'});}
 });
 // Members can remove their own access; only the original owner can rename or revoke the whole computer.
@@ -887,6 +895,7 @@ app.patch('/api/devices/:deviceId', rateLimit(20,10*60*1000), async (req,res)=>{
     const {data,error}=await supabaseAdmin.from('devices').update({name}).eq('id',deviceId).eq('user_id',user.id).select('id,name').maybeSingle();
     if(error)throw error;
     if(!data)return res.status(404).json({ok:false,error:'That device was not found in your account.'});
+    await recordSecurityEvent(user.id,'device_renamed',data.name);
     return res.json({ok:true,device:{id:data.id,name:data.name}});
   }catch(_){return res.status(503).json({ok:false,error:'Could not rename this device.'});}
 });
@@ -896,8 +905,8 @@ app.delete('/api/devices/:deviceId',rateLimit(10,10*60*1000),async(req,res)=>{
  const deviceId=req.params.deviceId;if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId))return res.status(400).json({ok:false,error:'Choose a valid device.'});
  try{
   const {data:device,error:lookupError}=await supabaseAdmin.from('devices').select('id,user_id').eq('id',deviceId).maybeSingle();if(lookupError)throw lookupError;if(!device)return res.status(404).json({ok:false,error:'That device was not found.'});
-  if(device.user_id===user.id){const {data,error}=await supabaseAdmin.from('devices').delete().eq('id',deviceId).eq('user_id',user.id).select('id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer was not found in your account.'});return res.json({ok:true,revoked:true,scope:'all_accounts'});}
-  const {data,error}=await supabaseAdmin.from('device_access').delete().eq('device_id',deviceId).eq('user_id',user.id).select('device_id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});return res.json({ok:true,revoked:true,scope:'this_account'});
+  if(device.user_id===user.id){const {data,error}=await supabaseAdmin.from('devices').delete().eq('id',deviceId).eq('user_id',user.id).select('id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer was not found in your account.'});await recordSecurityEvent(user.id,'device_revoked','All accounts · '+deviceId);return res.json({ok:true,revoked:true,scope:'all_accounts'});}
+  const {data,error}=await supabaseAdmin.from('device_access').delete().eq('device_id',deviceId).eq('user_id',user.id).select('device_id').maybeSingle();if(error)throw error;if(!data)return res.status(404).json({ok:false,error:'That computer is not paired to this account.'});await recordSecurityEvent(user.id,'device_revoked','This account · '+deviceId);return res.json({ok:true,revoked:true,scope:'this_account'});
  }catch(_){return res.status(503).json({ok:false,error:'Could not revoke this computer access.'});}
 });
 // Owner creates a short-lived six-digit pairing code. Only its hash is stored.
@@ -916,7 +925,7 @@ app.post('/api/enrollments', rateLimit(10,10*60*1000), async (req,res)=>{
       const code = generatePairingCode();
       const codeHash = hashEnrollmentCode(code,serviceKey);
       const { error } = await supabaseAdmin.from('device_enrollments').insert({ user_id:user.id, code_hash:codeHash, device_name:deviceName, expires_at:expiresAt });
-      if (!error) return res.status(201).json({ ok:true, pairingCode:code, enrollmentCode:code, expiresAt, expiresInSeconds:300 });
+      if (!error) { await recordSecurityEvent(user.id,'pair_requested',deviceName); return res.status(201).json({ ok:true, pairingCode:code, enrollmentCode:code, expiresAt, expiresInSeconds:300 }); }
       if (error.code !== '23505') throw error;
     }
     throw new Error('Could not generate a unique pairing code.');
@@ -941,6 +950,7 @@ app.post('/api/enrollments/approve', rateLimit(20,10*60*1000), async (req,res)=>
     const {data:approved,error:approveError}=await supabaseAdmin.from('device_enrollments').update({approved_at:now,user_id:user.id}).eq('id',ticket.id).is('approved_at',null).is('consumed_at',null).gt('expires_at',now).select('id').maybeSingle();
     if(approveError)throw approveError;
     if(!approved)return res.status(409).json({ok:false,error:'This code was already approved or expired.'});
+    await recordSecurityEvent(user.id,'device_approved','Computer pairing approved');
     return res.json({ok:true,approved:true});
   }catch(_){return res.status(503).json({ok:false,error:'Could not approve this computer. Try again.'});}
 });

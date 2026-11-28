@@ -143,15 +143,15 @@ test('a saved paired device opens a session review with continue and revoke acti
  assert.match(page,/showPage\('overview'\);toast\('Your PhoneBridge session is ready\.'/);
  assert.match(page,/api\('\/api\/devices\/'.*method:'DELETE'/);
  assert.match(page,/sessionReviewPage'\)\.classList\.toggle\('hidden',name!=='session'\)/);
- assert.match(page,/Revoke the pairing for .*Your PhoneBridge sign-in will remain active/);
+ assert.match(page,/This removes only your account access; other authorized accounts remain paired/);assert.match(page,/This revokes the computer for all authorized accounts/);
  assert.match(page,/body\[data-page="session"\].*#workspace/s);
 });
 
 test('device management APIs bind rename and revoke operations to the authenticated owner',()=>{
- const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8'),page=html();
  assert.match(server,/app\.patch\('\/api\/devices\/:deviceId'/);
  assert.match(server,/app\.delete\('\/api\/devices\/:deviceId'/);
- assert.match(server,/\.eq\('id',deviceId\)\.eq\('user_id',user\.id\)/);
+ assert.match(server,/\.eq\('id',deviceId\)\.eq\('user_id',user\.id\)/);assert.match(server,/isOwner:d\.user_id===user\.id/);assert.match(page,/x\.isOwner\?/);
 });
 
 test('pairing redemption rejects expired or already-consumed tickets and binds enrollment to ticket owner',()=>{
@@ -289,9 +289,9 @@ test('downloadable Windows Agent archive contains its launcher and every current
 
 test('pairing and command relay use reviewed migrations in order and service-role-only RPC grants',()=>{
  const dir=path.join(root,'supabase/migrations');const files=fs.readdirSync(dir).filter(name=>name.endsWith('.sql')).sort();
- assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql','007_multi_account_device_access.sql']);
- const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');const transfers=fs.readFileSync(path.join(dir,files[4]),'utf8');const bidirectional=fs.readFileSync(path.join(dir,files[5]),'utf8');const sharedAccess=fs.readFileSync(path.join(dir,files[6]),'utf8');
- assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);assert.match(sharedAccess,/create table if not exists public\.device_access/);assert.match(sharedAccess,/grant all on public\.device_access to service_role/);
+ assert.deepEqual(files,['001_phone_bridge_multiuser.sql','002_device_command_relay.sql','003_device_relay_functions.sql','004_computer_initiated_pairing.sql','005_resumable_pc_file_transfers.sql','006_bidirectional_phone_transfers.sql','007_multi_account_device_access.sql','008_workspace_services.sql']);
+ const base=fs.readFileSync(path.join(dir,files[0]),'utf8');const relay=fs.readFileSync(path.join(dir,files[1]),'utf8');const rpc=fs.readFileSync(path.join(dir,files[2]),'utf8');const pairing=fs.readFileSync(path.join(dir,files[3]),'utf8');const transfers=fs.readFileSync(path.join(dir,files[4]),'utf8');const bidirectional=fs.readFileSync(path.join(dir,files[5]),'utf8');const sharedAccess=fs.readFileSync(path.join(dir,files[6]),'utf8');const workspace=fs.readFileSync(path.join(dir,files[7]),'utf8');
+ assert.match(base,/create table if not exists public\.devices/);assert.match(base,/devices owner all/);assert.match(sharedAccess,/create table if not exists public\.device_access/);assert.match(sharedAccess,/grant all on public\.device_access to service_role/);assert.match(workspace,/create table if not exists public\.drive_folders/);assert.match(workspace,/create table if not exists public\.sync_items/);assert.match(workspace,/create table if not exists public\.sync_history/);assert.match(workspace,/create table if not exists public\.note_versions/);assert.match(workspace,/grant all on public\.drive_folders,public\.sync_items,public\.sync_history,public\.note_versions to service_role/);
  assert.match(relay,/create table if not exists public\.device_agents/);assert.match(relay,/create table if not exists public\.device_enrollments/);assert.match(relay,/create table if not exists public\.device_commands/);assert.match(relay,/revoke all on public\.device_agents from anon, authenticated/);assert.match(relay,/device commands owner read/);
  assert.match(rpc,/create or replace function public\.phonebridge_claim_device_command/);assert.match(rpc,/create or replace function public\.phonebridge_complete_device_command/);assert.match(rpc,/grant execute on function public\.phonebridge_claim_device_command\(uuid, text\) to service_role/);assert.match(rpc,/grant execute on function public\.phonebridge_complete_device_command\([\s\S]*?to service_role/);assert.match(pairing,/add column if not exists approved_at timestamptz/);assert.ok(transfers.includes('create table if not exists public.phone_transfers'));assert.ok(transfers.includes('create table if not exists public.phone_transfer_chunks'));assert.ok(transfers.includes('transfer-chunks'));assert.ok(transfers.includes('grant all on public.phone_transfers, public.phone_transfer_chunks to service_role'));assert.match(bidirectional,/add column if not exists direction text not null default 'phone_to_pc'/);assert.match(bidirectional,/create table if not exists public.phone_transfer_clients/);assert.match(bidirectional,/primary key \(user_id,id\)/);assert.match(bidirectional,/grant all on public.phone_transfer_clients to service_role/);
  const readme=fs.readFileSync(path.join(root,'README.md'),'utf8');assert.match(readme,/002_device_command_relay\.sql/);assert.match(readme,/003_device_relay_functions\.sql/);assert.match(readme,/computer-generated pairing code/i);assert.match(readme,/Render does not (run migrations automatically|apply database migrations)/);
@@ -404,4 +404,23 @@ test('multi-account pairing grants up to ten accounts access to one verified Thi
  assert.match(migration,/before insert on public\.device_access/);
  assert.match(migration,/>= 10/);
  assert.match(migration,/revoke all on public\.device_access from anon, authenticated/);
+});
+
+test('workspace folders, sync, notes and security endpoints are connected and account-scoped',()=>{
+ const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ const routes=fs.readFileSync(path.join(root,'lib/workspace-routes.js'),'utf8');
+ const page=html();
+ for(const route of ["app.post('/api/folders'","app.get('/api/sync/manifest'","app.post('/api/sync/upload'","app.post('/api/sync/restore'","app.get('/api/notes'","app.post('/api/notes'","app.put('/api/notes'","app.get('/api/notes/history'","app.delete('/api/notes'","app.get('/api/security/events'"])assert.ok(routes.includes(route),route+' is implemented');
+ assert.ok(server.includes('installWorkspaceRoutes('));
+ assert.match(routes,/const user=await requireOwner\(req,res\)/);
+ assert.match(routes,/\.eq\('user_id',user\.id\)/);
+ assert.match(routes,/createHash\('sha256'\)/);
+ assert.match(routes,/note_versions/);
+ assert.match(routes,/security_events/);
+ assert.match(page,/pathOnly==='\/api\/folders'&&method==='POST'/);
+ assert.match(page,/pathOnly==='\/api\/sync\/manifest'&&method==='GET'/);assert.match(page,/pathOnly==='\/api\/sync\/restore'&&method==='POST'/);assert.match(page,/data-sync-restore/);assert.match(page,/const pageNames=\[[^;]*'sync','notes','security'/);
+ assert.match(page,/pathOnly==='\/api\/notes'&&\['GET','POST','PUT','DELETE'\]\.includes\(method\)/);
+ assert.match(page,/pathOnly==='\/api\/security\/events'&&method==='GET'/);
+ assert.match(page,/x\.setRequestHeader\('Authorization','Bearer '\+token\)/,'sync uploads attach the current account token');
+ assert.match(page,/history\.slice\(0,20\)/,'sync history is visible in the workspace');
 });
